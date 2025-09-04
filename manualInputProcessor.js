@@ -251,8 +251,51 @@ class ManualInputProcessor {
     extractChordsFromHTML(html) {
         console.log('🔍 Starting HTML extraction...');
         
+        // First, let's find the actual song content section in the HTML
+        // Look for common arkjuander.com markers
+        const songSectionMarkers = [
+            'INTRO:',
+            'VERSE1:',
+            'VERSE 1:',
+            'CHORUS:',
+            'F Bb /E Gm', // Known chord progression from this song
+            'ONE THING I DESIRE',
+            'LORD YOUR NAME'
+        ];
+        
+        let songStartIndex = -1;
+        for (const marker of songSectionMarkers) {
+            const index = html.toUpperCase().indexOf(marker);
+            if (index !== -1) {
+                songStartIndex = index;
+                console.log('🎯 Found song content starting at marker:', marker, 'at position', index);
+                break;
+            }
+        }
+        
+        // If we found song content, extract a reasonable section around it
+        let workingHtml = html;
+        if (songStartIndex !== -1) {
+            // Extract from song start to end, or next 10000 chars
+            const songEndIndex = Math.min(songStartIndex + 10000, html.length);
+            workingHtml = html.substring(Math.max(0, songStartIndex - 500), songEndIndex);
+            console.log('🎵 Extracted song section, length:', workingHtml.length);
+        } else {
+            console.log('⚠️ No song content markers found, using full HTML');
+            // Try to find any section with chords
+            const chordPattern = /[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\s+[A-G]/g;
+            const chordMatches = html.match(chordPattern);
+            if (chordMatches && chordMatches.length > 3) {
+                const firstChordIndex = html.indexOf(chordMatches[0]);
+                if (firstChordIndex !== -1) {
+                    workingHtml = html.substring(firstChordIndex, Math.min(firstChordIndex + 8000, html.length));
+                    console.log('🎸 Found chord content, extracted section length:', workingHtml.length);
+                }
+            }
+        }
+        
         // Remove all HTML tags but preserve line breaks
-        let text = html
+        let text = workingHtml
             .replace(/<br\s*\/?>/gi, '\n')
             .replace(/<\/p>/gi, '\n')
             .replace(/<\/div>/gi, '\n')
@@ -265,6 +308,7 @@ class ManualInputProcessor {
             .trim();
 
         console.log('📄 Cleaned text length:', text.length);
+        console.log('📄 Text preview:', text.substring(0, 300));
 
         // Split into lines and clean up
         const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
@@ -355,12 +399,23 @@ class ManualInputProcessor {
                 continue;
             }
             
-            // Special handling for arkjuander.com - look for content after specific triggers
-            if (!inSongContent && (lowerLine.includes('original key') || lowerLine.includes('font'))) {
-                console.log('🎵 Found potential song content trigger, enabling extraction...');
-                inSongContent = true;
-                continue;
+            // More aggressive song content detection
+            if (!inSongContent) {
+                // Look for any line with chord patterns or known lyrics
+                if (/\b[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\s+/.test(line) ||
+                    lowerLine.includes('one thing') ||
+                    lowerLine.includes('i desire') ||
+                    lowerLine.includes('lord your name') ||
+                    lowerLine.includes('jesus') ||
+                    lowerLine.includes('higher than') ||
+                    /^[A-Z\s]{8,50}$/.test(line.trim())) {
+                    console.log('🎵 Auto-detected song content:', line.substring(0, 50));
+                    inSongContent = true;
+                }
             }
+            
+            // Skip if we haven't found song content yet
+            if (!inSongContent) continue;
             
             // Check for chord patterns specific to arkjuander format
             const hasChords = /\b[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\b/.test(line) ||
