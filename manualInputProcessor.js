@@ -266,6 +266,17 @@ class ManualInputProcessor {
             workingHtml = songAreaMatch[1] || songAreaMatch[0];
             console.log('🎯 Found song-area div! Content length:', workingHtml.length);
             console.log('🎵 Song area preview:', workingHtml.substring(0, 300));
+            
+            // Look for nested lyrics content within song-area
+            const lyricsMatch = workingHtml.match(/<div[^>]*class[^>]*lyrics[^>]*>(.*?)<\/div>/is) ||
+                               workingHtml.match(/<pre[^>]*class[^>]*verse[^>]*>(.*?)<\/pre>/is) ||
+                               workingHtml.match(/<pre[^>]*>(.*?)<\/pre>/is);
+            
+            if (lyricsMatch) {
+                workingHtml = lyricsMatch[1] || lyricsMatch[0];
+                console.log('🎼 Found nested lyrics content! Length:', workingHtml.length);
+                console.log('🎵 Lyrics preview:', workingHtml.substring(0, 200));
+            }
         } else {
             console.log('⚠️ No song-area div found, searching for content markers...');
             
@@ -312,20 +323,25 @@ class ManualInputProcessor {
         }
         
         // Remove all HTML tags but preserve line breaks
+        // Special handling for <pre> content which should preserve formatting
         let text = workingHtml
+            .replace(/<pre[^>]*>/gi, '\n') // Start of pre becomes newline
+            .replace(/<\/pre>/gi, '\n')    // End of pre becomes newline
             .replace(/<br\s*\/?>/gi, '\n')
             .replace(/<\/p>/gi, '\n')
             .replace(/<\/div>/gi, '\n')
-            .replace(/<[^>]*>/g, ' ')
+            .replace(/<[^>]*>/g, ' ')      // Remove remaining HTML tags
             .replace(/&nbsp;/g, ' ')
             .replace(/&amp;/g, '&')
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
-            .replace(/\s+/g, ' ')
+            .replace(/\s+/g, ' ')          // Normalize spaces
+            .replace(/\n\s+/g, '\n')       // Clean up line starts
+            .replace(/\s+\n/g, '\n')       // Clean up line ends
             .trim();
 
         console.log('📄 Cleaned text length:', text.length);
-        console.log('📄 Text preview:', text.substring(0, 300));
+        console.log('📄 Text preview:', text.substring(0, 500));
 
         // Split into lines and clean up
         const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
