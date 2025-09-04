@@ -64,7 +64,7 @@ class ManualInputProcessor {
     async processURL(url, message) {
         try {
             console.log('🔗 Processing URL:', url);
-            await message.edit('🔗 Processing URL... Fetching content from website...');
+            if (message) await message.edit('🔗 Processing URL... Fetching content from website...');
             
             // Ensure URL has protocol
             let fullURL = url;
@@ -83,22 +83,24 @@ class ManualInputProcessor {
                 const songInfo = this.extractSongInfoFromHTML(content, fullURL);
                 
                 if (songInfo) {
-                    await message.edit('✅ Successfully extracted lyrics from URL! Generating PDF...');
+                    if (message) await message.edit('✅ Successfully extracted lyrics from URL! Generating PDF...');
                     console.log('✅ Song extracted:', songInfo.title, 'by', songInfo.artist);
                     return songInfo;
                 } else {
                     console.log('❌ Could not extract song info from content');
+                    console.log('📄 Content preview:', content.substring(0, 500));
                 }
             } else {
                 console.log('❌ No content received from URL');
             }
             
-            await message.edit('❌ Could not extract lyrics from this URL. The site might not be supported or content is not accessible. Try pasting the lyrics directly instead.');
+            if (message) await message.edit('❌ Could not extract lyrics from this URL. The site might not be supported or content is not accessible. Try pasting the lyrics directly instead.');
             return null;
             
         } catch (error) {
             console.error('URL processing error:', error.message);
-            await message.edit(`❌ Error processing URL: ${error.message}. Please paste the lyrics directly.`);
+            console.error('Error stack:', error.stack);
+            if (message) await message.edit(`❌ Error processing URL: ${error.message}. Please paste the lyrics directly.`);
             return null;
         }
     }

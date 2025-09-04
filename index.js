@@ -55,16 +55,36 @@ client.on('messageCreate', async (message) => {
         return;
     }
 
-    // Test command
+    // Test URL processing command
     if (input.startsWith('!test ')) {
         const testInput = input.replace('!test ', '');
-        const isURL = manualProcessor.isURL(testInput);
-        const isLyrics = manualProcessor.looksLikeLyrics(testInput);
+        const testMsg = await message.reply('🧪 Testing...');
         
-        await message.reply(`🧪 **Test Results:**\n` +
-                           `Input: \`${testInput.substring(0, 50)}...\`\n` +
-                           `URL Detection: ${isURL ? '✅' : '❌'}\n` +
-                           `Lyrics Detection: ${isLyrics ? '✅' : '❌'}`);
+        try {
+            const isURL = manualProcessor.isURL(testInput);
+            const isLyrics = manualProcessor.looksLikeLyrics(testInput);
+            
+            let result = `🧪 **Test Results:**\n` +
+                        `Input: \`${testInput.substring(0, 50)}...\`\n` +
+                        `URL Detection: ${isURL ? '✅' : '❌'}\n` +
+                        `Lyrics Detection: ${isLyrics ? '✅' : '❌'}\n\n`;
+            
+            if (isURL) {
+                result += `🔗 **Attempting URL processing...**\n`;
+                await testMsg.edit(result + `Status: Processing URL...`);
+                
+                const song = await manualProcessor.processUserInput(testInput, testMsg);
+                if (song) {
+                    result += `✅ **SUCCESS!** Extracted: ${song.title} by ${song.artist}`;
+                } else {
+                    result += `❌ **FAILED** to extract content from URL`;
+                }
+            }
+            
+            await testMsg.edit(result);
+        } catch (error) {
+            await testMsg.edit(`❌ Test error: ${error.message}`);
+        }
         return;
     }
 
