@@ -97,6 +97,14 @@ class ManualInputProcessor {
                 } else {
                     console.log('❌ Could not extract song info from content');
                     console.log('📄 Content sample for debugging:', content.substring(500, 1000));
+                    
+                    // Try a simpler extraction method
+                    console.log('🔄 Trying simpler extraction method...');
+                    const simpleExtraction = this.simpleTextExtraction(content, fullURL);
+                    if (simpleExtraction) {
+                        if (message) await message.edit('✅ Successfully extracted content with basic method! Generating PDF...');
+                        return simpleExtraction;
+                    }
                 }
             } else {
                 console.log('❌ No content received from URL');
@@ -122,38 +130,71 @@ class ManualInputProcessor {
                 hostname: urlObj.hostname,
                 path: urlObj.pathname + urlObj.search,
                 method: 'GET',
-                timeout: 10000,
+                timeout: 15000, // Increased timeout
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Connection': 'keep-alive'
                 }
             };
 
+            console.log('🌐 Making request to:', `${urlObj.hostname}${urlObj.pathname}`);
+            console.log('📡 Request headers:', JSON.stringify(options.headers, null, 2));
+
             const req = https.request(options, (res) => {
-                let data = '';
+                console.log('📡 Response status:', res.statusCode);
+                console.log('📡 Response headers:', JSON.stringify(res.headers, null, 2));
                 
-                res.on('data', (chunk) => {
-                    data += chunk;
-                    // Limit data size to prevent memory issues
-                    if (data.length > 500000) { // 500KB limit
-                        req.destroy();
-                        reject(new Error('Content too large'));
+                if (res.statusCode === 200) {
+                    let data = '';
+                    
+                    res.on('data', (chunk) => {
+                        data += chunk;
+                        // Limit data size to prevent memory issues
+                        if (data.length > 500000) { // 500KB limit
+                            console.log('⚠️ Content size limit reached, truncating...');
+                            req.destroy();
+                            resolve(data); // Return what we have so far
+                        }
+                    });
+                    
+                    res.on('end', () => {
+                        console.log('✅ Content received, final length:', data.length);
+                        resolve(data);
+                    });
+                } else if (res.statusCode === 301 || res.statusCode === 302) {
+                    // Handle redirects
+                    const redirectUrl = res.headers.location;
+                    console.log('🔄 Redirect to:', redirectUrl);
+                    if (redirectUrl) {
+                        // Resolve relative redirects
+                        const fullRedirectUrl = redirectUrl.startsWith('http') ? 
+                            redirectUrl : 
+                            `${urlObj.protocol}//${urlObj.hostname}${redirectUrl}`;
+                        this.fetchURLContent(fullRedirectUrl).then(resolve).catch(reject);
+                    } else {
+                        reject(new Error(`Redirect without location header: ${res.statusCode}`));
                     }
-                });
-                
-                res.on('end', () => {
-                    resolve(data);
-                });
+                } else {
+                    console.log('❌ HTTP Error:', res.statusCode, res.statusMessage);
+                    reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+                }
             });
 
             req.on('error', (error) => {
+                console.error('❌ Request error:', error.message);
+                console.error('❌ Error details:', error);
                 reject(error);
             });
 
             req.on('timeout', () => {
+                console.error('❌ Request timeout after 15 seconds');
                 req.destroy();
-                reject(new Error('Request timeout'));
+                reject(new Error('Request timeout - website took too long to respond'));
             });
 
+            req.setTimeout(15000);
             req.end();
         });
     }
@@ -339,6 +380,55 @@ class ManualInputProcessor {
         
         // Return the array directly instead of joining and splitting
         return foundChords && lyricsLines.length > 5 ? lyricsLines : null;
+    }
+
+    // Simple text extraction as fallback
+    simpleTextExtraction(html, url) {
+        try {
+            console.log('🔄 Attempting simple text extraction...');
+            
+            // Very basic text extraction - just grab all text content
+            let text = html
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            
+            // Look for common chord/lyrics patterns
+            const lines = text.split(/\s+/).join(' ').split(/[.!?]\s+/);
+            const lyricsLines = [];
+            
+            for (const line of lines) {
+                // Look for lines that might contain chords and lyrics
+                if (line.length > 10 && line.length < 200 && 
+                    (/\b[A-G](?:m|maj|min|dim|aug|sus|add)?\b/.test(line) ||
+                     /verse|chorus|bridge|intro/i.test(line))) {
+                    lyricsLines.push(line.trim());
+                }
+            }
+            
+            if (lyricsLines.length > 3) {
+                const urlInfo = this.extractTitleFromURL(url);
+                console.log('✅ Simple extraction found', lyricsLines.length, 'potential lyrics lines');
+                
+                return {
+                    id: Date.now(),
+                    title: urlInfo?.title || 'Song from URL',
+                    artist: urlInfo?.artist || 'Unknown Artist',
+                    lyrics: lyricsLines,
+                    source: "URL content (simple extraction)",
+                    disclaimer: "Content extracted using simple method - formatting may be basic",
+                    isWebResult: true,
+                    isManualInput: true
+                };
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Simple extraction error:', error.message);
+            return null;
+        }
     }
 
     // Extract title from URL
