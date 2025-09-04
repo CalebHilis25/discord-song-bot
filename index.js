@@ -55,6 +55,44 @@ client.on('messageCreate', async (message) => {
         return;
     }
 
+    // Test URL processing specifically
+    if (input.startsWith('!testurl')) {
+        const url = input.replace('!testurl', '').trim() || 'https://arkjuander.com/lyrics-and-chords/one-thing-hillsong-worship';
+        const testMsg = await message.reply(`🧪 **Testing URL Processing**\n\nURL: ${url}\nStatus: Starting test...`);
+        
+        try {
+            console.log('🧪 Starting URL test with:', url);
+            
+            // Test URL detection
+            const isURL = manualProcessor.isURL(url);
+            let result = `URL Detection: ${isURL ? '✅' : '❌'}\n\n`;
+            
+            if (isURL) {
+                result += `🔗 **Processing URL...**\n`;
+                await testMsg.edit(result + `Status: Fetching content...`);
+                
+                const song = await manualProcessor.processURL(url, testMsg);
+                if (song) {
+                    result += `✅ **SUCCESS!**\n`;
+                    result += `Title: ${song.title}\n`;
+                    result += `Artist: ${song.artist}\n`;
+                    result += `Lines: ${song.lyrics?.length || 0}\n`;
+                    result += `Sample: ${song.lyrics?.slice(0, 3)?.join(' | ') || 'None'}`;
+                } else {
+                    result += `❌ **FAILED** to extract content\nCheck Railway logs for details.`;
+                }
+            } else {
+                result += `❌ URL not recognized as supported site`;
+            }
+            
+            await testMsg.edit(result);
+        } catch (error) {
+            console.error('URL Test Error:', error);
+            await testMsg.edit(`❌ Test error: ${error.message}`);
+        }
+        return;
+    }
+
     // Test URL processing command
     if (input.startsWith('!test ')) {
         const testInput = input.replace('!test ', '');
