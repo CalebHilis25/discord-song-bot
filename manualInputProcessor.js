@@ -37,6 +37,7 @@ class ManualInputProcessor {
             // Also check for common URL patterns without protocol
             if (input.includes('ultimate-guitar.com') || 
                 input.includes('tabs.ultimate-guitar.com') ||
+                input.includes('arkjuander.com') ||
                 input.includes('chordu.com') ||
                 input.includes('azchords.com') ||
                 input.includes('.com') && input.includes('/')) {
@@ -218,39 +219,71 @@ class ManualInputProcessor {
         const lyricsLines = [];
         
         let foundChords = false;
+        let inSongContent = false;
         
         for (const line of lines) {
-            // Check if line contains chord patterns
-            const hasChords = /\b[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\b/.test(line);
-            const hasLyrics = line.length > 10 && !/^[A-G\s#b]+$/.test(line);
-            
-            // Skip navigation, advertisement, and other non-content
-            if (line.toLowerCase().includes('advertisement') ||
-                line.toLowerCase().includes('subscribe') ||
-                line.toLowerCase().includes('ultimate guitar') ||
-                line.toLowerCase().includes('tab by') ||
-                line.toLowerCase().includes('capo') ||
-                line.length < 3) {
-                continue;
-            }
-            
-            // Look for verse, chorus, bridge markers
-            if (line.toLowerCase().includes('verse') ||
+            // Skip until we find song content markers
+            if (line.toLowerCase().includes('intro:') || 
+                line.toLowerCase().includes('verse') ||
                 line.toLowerCase().includes('chorus') ||
-                line.toLowerCase().includes('bridge') ||
-                line.toLowerCase().includes('intro') ||
-                line.toLowerCase().includes('outro')) {
-                lyricsLines.push(`[${line}]`);
+                line.toLowerCase().includes('bridge')) {
+                inSongContent = true;
+                lyricsLines.push(`[${line.replace(/:/g, '')}]`);
                 foundChords = true;
                 continue;
             }
             
+            // Skip navigation, advertisement, and other non-content
+            if (!inSongContent || 
+                line.toLowerCase().includes('advertisement') ||
+                line.toLowerCase().includes('subscribe') ||
+                line.toLowerCase().includes('ultimate guitar') ||
+                line.toLowerCase().includes('arkjuander') ||
+                line.toLowerCase().includes('copyright') ||
+                line.toLowerCase().includes('no copyright') ||
+                line.toLowerCase().includes('contact us') ||
+                line.toLowerCase().includes('home') ||
+                line.toLowerCase().includes('songs') ||
+                line.toLowerCase().includes('privacy') ||
+                line.toLowerCase().includes('sitemap') ||
+                line.toLowerCase().includes('composer') ||
+                line.toLowerCase().includes('album') ||
+                line.toLowerCase().includes('release date') ||
+                line.toLowerCase().includes('tags :') ||
+                line.toLowerCase().includes('buy me a coffee') ||
+                line.toLowerCase().includes('digital ocean') ||
+                line.toLowerCase().includes('original key') ||
+                line.toLowerCase().includes('transposed key') ||
+                line.toLowerCase().includes('font') ||
+                line.length < 3) {
+                continue;
+            }
+            
+            // Check if line contains chord patterns (common chord names)
+            const hasChords = /\b[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\b/.test(line) ||
+                             /\b[A-G](?:#|b)?\b/.test(line);
+            
+            // Check if it looks like lyrics (has meaningful words)
+            const hasLyrics = line.length > 5 && 
+                             !/^[A-G\s#b/]+$/.test(line) &&
+                             /[aeiouAEIOU]/.test(line);
+            
             // Add lines with chords or lyrics
             if (hasChords || hasLyrics) {
-                lyricsLines.push(line);
-                if (hasChords) foundChords = true;
+                // Clean up common website artifacts
+                let cleanLine = line
+                    .replace(/\s+/g, ' ')
+                    .replace(/^\d+\.\s*/, '') // Remove numbering
+                    .trim();
+                
+                if (cleanLine.length > 0) {
+                    lyricsLines.push(cleanLine);
+                    if (hasChords) foundChords = true;
+                }
             }
         }
+        
+        console.log(`🎵 Extracted ${lyricsLines.length} lines, found chords: ${foundChords}`);
         
         return foundChords && lyricsLines.length > 5 ? lyricsLines.join('\n') : null;
     }
@@ -260,6 +293,37 @@ class ManualInputProcessor {
         try {
             const urlObj = new URL(url);
             console.log('🔍 Parsing URL:', url);
+            
+            // Handle arkjuander.com URLs specifically
+            if (urlObj.hostname.includes('arkjuander.com')) {
+                const pathParts = urlObj.pathname.split('/').filter(part => part.length > 0);
+                console.log('📂 Arkjuander path parts:', pathParts);
+                
+                // Format: /lyrics-and-chords/song-title-artist
+                if (pathParts.length >= 2 && pathParts[0] === 'lyrics-and-chords') {
+                    const songPart = pathParts[1];
+                    // Try to extract from "one-thing-hillsong-worship"
+                    const parts = songPart.split('-');
+                    
+                    // Look for common artist indicators
+                    const artistIndicators = ['hillsong', 'bethel', 'elevation', 'jesus', 'culture'];
+                    let artistIndex = -1;
+                    
+                    for (let i = 0; i < parts.length; i++) {
+                        if (artistIndicators.some(indicator => parts[i].toLowerCase().includes(indicator))) {
+                            artistIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    if (artistIndex > 0) {
+                        const title = parts.slice(0, artistIndex).join(' ').replace(/\b\w/g, char => char.toUpperCase());
+                        const artist = parts.slice(artistIndex).join(' ').replace(/\b\w/g, char => char.toUpperCase());
+                        console.log('🎵 Extracted from Arkjuander URL:', { artist, title });
+                        return { artist, title };
+                    }
+                }
+            }
             
             // Handle ultimate-guitar.com URLs specifically
             if (urlObj.hostname.includes('ultimate-guitar.com')) {
