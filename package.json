@@ -1,7 +1,7 @@
 {
   "name": "discord-song-bot",
-  "version": "1.0.0",
-  "description": "Discord bot that provides song lyrics with chords and generates downloadable PDF files",
+  "version": "4.0.0",
+  "description": "Discord bot that ONLY processes URLs and pasted lyrics - NO web search",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -10,7 +10,7 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["discord", "bot", "music", "lyrics", "chords", "pdf"],
+  "keywords": ["discord", "bot", "music", "lyrics", "chords", "pdf", "manual-input", "url-processing"],
   "author": "",
   "license": "MIT",
   "dependencies": {
