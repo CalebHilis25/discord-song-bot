@@ -1,115 +1,139 @@
-const fetch = require('node-fetch');
+// Railway-compatible web search service using built-in modules
+const https = require('https');
+const { URL } = require('url');
 
-// Enhanced web search service for real lyrics
 class LyricsSearchService {
     constructor() {
-        console.log('🌐 Web search service initialized');
+        console.log('🌐 Web search service initialized (Railway compatible)');
     }
 
-    // Real web search implementation
+    // Railway-compatible web search
     async searchLyrics(songTitle, artist = '') {
         try {
             console.log(`🔍 Web search for: "${songTitle}" by ${artist}`);
             
-            // Try multiple search strategies
-            let result = await this.searchWithAPI(songTitle, artist);
+            // Try the API search first
+            const result = await this.searchWithSimpleAPI(songTitle, artist);
             
-            if (!result) {
-                result = await this.searchWithWebScraping(songTitle, artist);
+            if (result) {
+                return result;
             }
             
-            if (!result) {
-                result = await this.generatePlaceholderResult(songTitle, artist);
-            }
-            
-            return result;
+            // If API fails, return enhanced placeholder
+            return this.generateEnhancedResult(songTitle, artist);
             
         } catch (error) {
             console.error('Web search error:', error.message);
-            return await this.generatePlaceholderResult(songTitle, artist);
+            return this.generateEnhancedResult(songTitle, artist);
         }
     }
 
-    // Search using lyrics APIs
-    async searchWithAPI(songTitle, artist) {
-        try {
-            // Use Lyrics.ovh API (free and reliable)
-            const apiUrl = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(songTitle)}`;
-            
-            const response = await fetch(apiUrl, {
-                timeout: 10000,
-                headers: {
-                    'User-Agent': 'Discord-Song-Bot/1.0'
-                }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
+    // Simple API search using built-in https module
+    searchWithSimpleAPI(songTitle, artist) {
+        return new Promise((resolve) => {
+            try {
+                // Use lyrics.ovh API with built-in https
+                const apiUrl = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(songTitle)}`;
+                const url = new URL(apiUrl);
                 
-                if (data.lyrics) {
-                    console.log(`✅ Found lyrics via API for "${songTitle}"`);
-                    return this.formatLyricsFromAPI(data.lyrics, songTitle, artist);
-                }
+                const options = {
+                    hostname: url.hostname,
+                    path: url.pathname + url.search,
+                    method: 'GET',
+                    timeout: 8000,
+                    headers: {
+                        'User-Agent': 'Discord-Song-Bot/1.0'
+                    }
+                };
+
+                const req = https.request(options, (res) => {
+                    let data = '';
+                    
+                    res.on('data', (chunk) => {
+                        data += chunk;
+                    });
+                    
+                    res.on('end', () => {
+                        try {
+                            if (res.statusCode === 200) {
+                                const parsed = JSON.parse(data);
+                                if (parsed.lyrics) {
+                                    console.log(`✅ Found lyrics via API for "${songTitle}"`);
+                                    resolve(this.formatLyricsFromAPI(parsed.lyrics, songTitle, artist));
+                                    return;
+                                }
+                            }
+                            resolve(null);
+                        } catch (parseError) {
+                            console.log('API parse error:', parseError.message);
+                            resolve(null);
+                        }
+                    });
+                });
+
+                req.on('error', (error) => {
+                    console.log('API request error:', error.message);
+                    resolve(null);
+                });
+
+                req.on('timeout', () => {
+                    console.log('API request timeout');
+                    req.destroy();
+                    resolve(null);
+                });
+
+                req.end();
+                
+            } catch (error) {
+                console.log('API setup error:', error.message);
+                resolve(null);
             }
-            
-            return null;
-            
-        } catch (error) {
-            console.log('API search failed:', error.message);
-            return null;
-        }
+        });
     }
 
-    // Format lyrics from API response
+    // Format lyrics from API
     formatLyricsFromAPI(rawLyrics, songTitle, artist) {
         try {
-            // Clean and format the lyrics
+            // Clean and format lyrics
             const lines = rawLyrics
                 .replace(/\r\n/g, '\n')
                 .replace(/\r/g, '\n')
                 .split('\n')
                 .map(line => line.trim())
                 .filter(line => line.length > 0);
-            
-            // Add chord placeholders for better formatting
+
             const formattedLines = [];
-            let inVerse = false;
             
-            for (let i = 0; i < lines.length; i++) {
+            for (let i = 0; i < Math.min(lines.length, 40); i++) {
                 const line = lines[i];
                 
-                // Detect sections
-                if (line.toLowerCase().includes('verse') || 
+                // Detect section headers
+                if (line.match(/^\[.*\]$/) || 
+                    line.toLowerCase().includes('verse') || 
                     line.toLowerCase().includes('chorus') || 
-                    line.toLowerCase().includes('bridge') ||
-                    line.toLowerCase().includes('intro') ||
-                    line.toLowerCase().includes('outro')) {
-                    formattedLines.push(`[${line}]`);
-                    inVerse = true;
-                } else {
-                    // Add chord placeholders for regular lines
-                    if (inVerse && line.length > 10) {
-                        // Add a simple chord progression
-                        const chords = this.generateChordProgression(i);
-                        formattedLines.push(chords);
-                    }
+                    line.toLowerCase().includes('bridge')) {
+                    formattedLines.push(`[${line.replace(/[\[\]]/g, '')}]`);
+                } else if (line.length > 5) {
+                    // Add chord progression for longer lines
+                    const chords = this.getChordProgression(i);
+                    formattedLines.push(chords);
                     formattedLines.push(line);
-                    
-                    // Add spacing between sections
-                    if (i < lines.length - 1 && lines[i + 1].toLowerCase().includes('verse') ||
-                        lines[i + 1].toLowerCase().includes('chorus') ||
-                        lines[i + 1].toLowerCase().includes('bridge')) {
-                        formattedLines.push('');
-                    }
+                } else {
+                    formattedLines.push(line);
+                }
+                
+                // Add spacing
+                if (i % 4 === 3) {
+                    formattedLines.push('');
                 }
             }
-            
+
             return {
                 title: songTitle,
                 artist: artist,
-                lyrics: formattedLines.slice(0, 50), // Limit length
-                source: "lyrics.ovh",
-                disclaimer: "Lyrics sourced from lyrics.ovh API - for educational/personal use",
+                lyrics: formattedLines,
+                source: "lyrics.ovh API",
+                disclaimer: "Lyrics sourced from lyrics.ovh - for educational/personal use only",
                 isWebResult: true
             };
             
@@ -119,11 +143,11 @@ class LyricsSearchService {
         }
     }
 
-    // Generate simple chord progressions
-    generateChordProgression(lineIndex) {
+    // Generate chord progressions
+    getChordProgression(index) {
         const progressions = [
             "C               G",
-            "Am              F",
+            "Am              F", 
             "F               C",
             "G               Am",
             "Em              C",
@@ -131,124 +155,66 @@ class LyricsSearchService {
             "A               E",
             "Bm              G"
         ];
-        
-        return progressions[lineIndex % progressions.length];
+        return progressions[index % progressions.length];
     }
 
-    // Fallback web scraping (simplified)
-    async searchWithWebScraping(songTitle, artist) {
-        try {
-            console.log('🔍 Trying alternative search methods...');
-            
-            // Simple search query
-            const query = `${artist} ${songTitle} lyrics`;
-            const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-            
-            // For now, return a formatted placeholder
-            // In production, you'd implement actual scraping with proper parsing
-            
-            return {
-                title: songTitle,
-                artist: artist,
-                lyrics: [
-                    "[Found via Web Search]",
-                    "C               G",
-                    `Song: ${songTitle}`,
-                    "Am              F",
-                    `Artist: ${artist}`,
-                    "",
-                    "[Note]",
-                    "F               C",
-                    "Web scraping implementation",
-                    "G               Am",
-                    "Can be enhanced with specific",
-                    "D               Em",
-                    "Lyrics website parsing"
-                ],
-                source: "web_search",
-                disclaimer: "Enhanced web search - implementation can be expanded",
-                isWebResult: true
-            };
-            
-        } catch (error) {
-            console.log('Web scraping failed:', error.message);
-            return null;
-        }
-    }
-
-    // Generate placeholder when all else fails
-    async generatePlaceholderResult(songTitle, artist) {
+    // Enhanced placeholder when song not found
+    generateEnhancedResult(songTitle, artist) {
         return {
             title: songTitle,
-            artist: artist,
+            artist: artist || 'Unknown Artist',
             lyrics: [
-                "[Song Not Found in Database]",
+                "[Web Search Result]",
                 "C               G",
-                `Searched for: ${songTitle}`,
+                `Searched for: "${songTitle}"`,
                 "Am              F",
-                `By: ${artist}`,
+                `By: ${artist || 'Unknown Artist'}`,
                 "",
-                "[Suggestion]",
+                "[Status]",
                 "F               C",
-                "Try adding this song manually",
-                "G               Am",
-                "Or check the spelling",
+                "Song not found in lyrics database",
+                "G               Am", 
+                "Try with exact artist and title",
                 "",
-                "[Alternative]",
-                "D               Em",
-                "Search for similar songs",
-                "C               G",
-                "Or request it from the bot admin"
+                "[Suggestions]",
+                "Em              C",
+                "• Check spelling carefully",
+                "D               G",
+                "• Use format: 'Artist - Song Title'",
+                "C               F",
+                "• Try popular/well-known songs",
+                "G               C",
+                "• Add this song to local database"
             ],
-            source: "placeholder",
-            disclaimer: "Song not found - this is a placeholder result",
+            source: "web_search",
+            disclaimer: "Song not found in online databases - consider adding manually",
             isWebResult: true
         };
     }
 
-    // Enhanced discovery
+    // Discovery with popular songs
     async discoverPopularSongs() {
-        try {
-            console.log('🎵 Auto-discovering popular songs...');
-            
-            // Use a music charts API or predefined list
-            const popularSongs = [
-                { title: "Blinding Lights", artist: "The Weeknd" },
-                { title: "Watermelon Sugar", artist: "Harry Styles" },
-                { title: "Levitating", artist: "Dua Lipa" },
-                { title: "Good 4 U", artist: "Olivia Rodrigo" },
-                { title: "Stay", artist: "The Kid LAROI & Justin Bieber" },
-                { title: "Anti-Hero", artist: "Taylor Swift" },
-                { title: "As It Was", artist: "Harry Styles" },
-                { title: "Heat Waves", artist: "Glass Animals" }
-            ];
-
-            console.log(`🎵 Discovered ${popularSongs.length} popular songs`);
-            return popularSongs;
-            
-        } catch (error) {
-            console.error('Discovery error:', error.message);
-            return [];
-        }
+        return [
+            { title: "Shape of You", artist: "Ed Sheeran" },
+            { title: "Blinding Lights", artist: "The Weeknd" },
+            { title: "Someone Like You", artist: "Adele" },
+            { title: "Perfect", artist: "Ed Sheeran" },
+            { title: "Watermelon Sugar", artist: "Harry Styles" },
+            { title: "Levitating", artist: "Dua Lipa" },
+            { title: "Stay", artist: "The Kid LAROI" },
+            { title: "Anti-Hero", artist: "Taylor Swift" }
+        ];
     }
 
     // Enhanced suggestions
     async getSongSuggestions(partialTitle) {
-        try {
-            const suggestions = [
-                `"${partialTitle}" - Try with artist name`,
-                `"Artist - ${partialTitle}" - Use full format`,
-                `"${partialTitle} lyrics" - Add 'lyrics'`,
-                `Check spelling of "${partialTitle}"`,
-                `Try popular songs similar to "${partialTitle}"`
-            ];
-
-            return suggestions;
-            
-        } catch (error) {
-            console.error('Suggestions error:', error.message);
-            return [];
-        }
+        return [
+            `Try: "${partialTitle}" with artist name`,
+            `Format: "Artist - ${partialTitle}"`,
+            `Check spelling: "${partialTitle}"`,
+            `Popular songs similar to "${partialTitle}"`,
+            `Add "lyrics" to search: "${partialTitle} lyrics"`
+        ];
     }
 }
 
