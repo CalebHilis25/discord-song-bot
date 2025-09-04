@@ -19,7 +19,7 @@ const client = new Client({
 client.once('ready', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}!`);
     console.log(`🎵 Ready to provide song lyrics and chords!`);
-    console.log(`🌐 Web search capabilities enabled!`);
+    console.log(`🌐 Web search capabilities enabled! v2.0`);
     
     // Auto-discover popular songs on startup (optional)
     // setTimeout(autoDiscoverSongs, 5000); // Uncomment to enable auto-discovery
