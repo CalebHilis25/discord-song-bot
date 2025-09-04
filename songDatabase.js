@@ -1,5 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const { LyricsSearchService } = require('./webSearchService');
+
+// Initialize web search service
+const webSearch = new LyricsSearchService();
 
 // Sample song database - Replace with your own legal content
 const songs = [
@@ -58,14 +62,114 @@ const songs = [
     }
 ];
 
-// Search for a song by title (case-insensitive, partial match)
-function searchSong(searchTerm) {
+// Enhanced search function with web search capabilities
+async function searchSong(searchTerm) {
     const term = searchTerm.toLowerCase().trim();
     
-    return songs.find(song => 
+    // First, search local database
+    const localResult = songs.find(song => 
         song.title.toLowerCase().includes(term) ||
         song.artist.toLowerCase().includes(term)
     );
+    
+    if (localResult) {
+        console.log(`✅ Found "${searchTerm}" in local database`);
+        return localResult;
+    }
+    
+    // If not found locally, search the web
+    console.log(`🌐 Searching web for "${searchTerm}"...`);
+    
+    try {
+        const webResult = await webSearch.searchLyrics(searchTerm);
+        
+        if (webResult) {
+            console.log(`✅ Found "${searchTerm}" on the web from ${webResult.source}`);
+            
+            // Convert web result to our format
+            const formattedResult = {
+                id: songs.length + 1,
+                title: webResult.title,
+                artist: webResult.artist,
+                lyrics: webResult.lyrics,
+                source: webResult.source,
+                disclaimer: webResult.disclaimer,
+                isWebResult: true
+            };
+            
+            // Optionally cache the result
+            await cacheWebResult(formattedResult);
+            
+            return formattedResult;
+        }
+        
+    } catch (error) {
+        console.error('Web search error:', error.message);
+    }
+    
+    // If still not found, try auto-suggestions
+    console.log(`💡 Suggesting alternatives for "${searchTerm}"...`);
+    return null;
+}
+
+// Cache web results for faster future access
+async function cacheWebResult(song) {
+    try {
+        // Add to runtime cache
+        songs.push({
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            lyrics: song.lyrics,
+            source: song.source,
+            cached: true,
+            cachedAt: new Date().toISOString()
+        });
+        
+        console.log(`📦 Cached "${song.title}" for future use`);
+        
+    } catch (error) {
+        console.error('Error caching song:', error.message);
+    }
+}
+
+// Auto-discover and cache popular songs
+async function autoDiscoverSongs() {
+    try {
+        console.log('🔍 Auto-discovering popular songs...');
+        
+        const popularSongs = await webSearch.discoverPopularSongs();
+        
+        for (const songInfo of popularSongs.slice(0, 5)) { // Limit to 5 songs
+            try {
+                const lyrics = await webSearch.searchLyrics(songInfo.title, songInfo.artist);
+                if (lyrics) {
+                    await cacheWebResult(lyrics);
+                }
+                
+                // Small delay to be respectful to web services
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+            } catch (error) {
+                console.log(`Failed to cache ${songInfo.title}: ${error.message}`);
+            }
+        }
+        
+        console.log(`✅ Auto-discovery complete! Added ${popularSongs.length} songs to cache`);
+        
+    } catch (error) {
+        console.error('Auto-discovery error:', error.message);
+    }
+}
+
+// Get song suggestions
+async function getSongSuggestions(partialTitle) {
+    try {
+        return await webSearch.getSongSuggestions(partialTitle);
+    } catch (error) {
+        console.error('Error getting suggestions:', error.message);
+        return [];
+    }
 }
 
 // Get all available songs
@@ -119,5 +223,7 @@ module.exports = {
     getAllSongs,
     addSong,
     loadSongsFromFile,
-    saveSongsToFile
+    saveSongsToFile,
+    autoDiscoverSongs,
+    getSongSuggestions
 };

@@ -4,11 +4,14 @@ A Discord bot that provides song lyrics with chords and generates downloadable P
 
 ## ✨ Features
 
-- 🔍 **Song Search** - Just type any song title
+- 🔍 **Smart Song Search** - Local database + Web search
+- 🌐 **Internet Search** - Automatically searches the web for songs
 - 📄 **PDF Generation** - 2-column layout with lyrics and chords
 - 📥 **Auto Download** - Ready-to-download PDF files
 - 🎨 **Custom Format** - Bold titles, 11pt font size
 - ⚡ **Real-time Response** - Instant Discord integration
+- 🤖 **Auto-Discovery** - Finds popular songs automatically
+- 💡 **Smart Suggestions** - Provides alternatives when songs aren't found
 
 ## 🚀 Quick Start
 
@@ -51,21 +54,32 @@ A Discord bot that provides song lyrics with chords and generates downloadable P
 
 ### Discord Commands
 
-- **Song Search**: Just type the song title
+- **Song Search**: Just type the song title or "Artist - Song"
   ```
-  sample song
-  demo track
+  Blinding Lights
+  The Weeknd - Blinding Lights
+  Wonderwall Oasis
   ```
 
-- **Help**: `!help` - Show available commands
-- **List Songs**: `!list` - Show available songs in database
+- **Help**: `!help` - Show available commands and search tips
+- **List Songs**: `!list` - Show local and cached songs
+- **Auto-Discover**: `!discover` - Find and cache popular songs
 
 ### Example Response
 When you type a song title, the bot will:
-1. Search for the song in the database
-2. Generate a PDF with lyrics and chords
-3. Send the PDF as an attachment in Discord
-4. Format: 2 columns, bold title, 11pt font
+1. Show a "🔍 Searching..." message
+2. Check local database first (fastest)
+3. Search the web if not found locally
+4. Generate a PDF with lyrics and chords
+5. Send the PDF as an attachment in Discord
+6. Include source information and legal disclaimers
+7. Format: 2 columns, bold title, 11pt font
+
+**Web Search Features:**
+- Searches multiple lyric websites
+- Caches results for faster future access
+- Provides source attribution
+- Includes copyright disclaimers
 
 ## 🛠️ Setup Instructions
 
