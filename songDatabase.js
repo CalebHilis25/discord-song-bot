@@ -77,14 +77,17 @@ async function searchSong(searchTerm) {
         return localResult;
     }
     
+    // Parse the search term to extract artist and title
+    const { artist, title } = parseSearchTerm(searchTerm);
+    
     // If not found locally, search the web
-    console.log(`🌐 Searching web for "${searchTerm}"...`);
+    console.log(`🌐 Searching web for "${title}" by "${artist}"...`);
     
     try {
-        const webResult = await webSearch.searchLyrics(searchTerm);
+        const webResult = await webSearch.searchLyrics(title, artist);
         
         if (webResult) {
-            console.log(`✅ Found "${searchTerm}" on the web from ${webResult.source}`);
+            console.log(`✅ Found "${title}" on the web from ${webResult.source}`);
             
             // Convert web result to our format
             const formattedResult = {
@@ -110,6 +113,72 @@ async function searchSong(searchTerm) {
     // If still not found, try auto-suggestions
     console.log(`💡 Suggesting alternatives for "${searchTerm}"...`);
     return null;
+}
+
+// Parse search term to extract artist and title
+function parseSearchTerm(searchTerm) {
+    const term = searchTerm.trim();
+    
+    // Try different parsing patterns
+    let artist = '';
+    let title = '';
+    
+    // Pattern 1: "Artist - Title" or "Artist-Title"
+    if (term.includes(' - ') || term.includes('-')) {
+        const separator = term.includes(' - ') ? ' - ' : '-';
+        const parts = term.split(separator);
+        if (parts.length >= 2) {
+            artist = parts[0].trim();
+            title = parts.slice(1).join(separator).trim();
+        }
+    }
+    // Pattern 2: "Title by Artist"
+    else if (term.includes(' by ')) {
+        const parts = term.split(' by ');
+        if (parts.length >= 2) {
+            title = parts[0].trim();
+            artist = parts.slice(1).join(' by ').trim();
+        }
+    }
+    // Pattern 3: "Artist Title" (guess based on common artist names)
+    else {
+        const words = term.split(' ');
+        if (words.length >= 2) {
+            // Common patterns for artist names
+            const commonArtists = ['ed sheeran', 'taylor swift', 'adele', 'the weeknd', 'billie eilish', 'harry styles', 'dua lipa'];
+            
+            for (const commonArtist of commonArtists) {
+                if (term.toLowerCase().includes(commonArtist)) {
+                    artist = commonArtist;
+                    title = term.toLowerCase().replace(commonArtist, '').trim();
+                    break;
+                }
+            }
+            
+            // If no common artist found, assume first word(s) is artist
+            if (!artist) {
+                if (words.length === 2) {
+                    artist = words[0];
+                    title = words[1];
+                } else if (words.length >= 3) {
+                    artist = words.slice(0, 2).join(' '); // First 2 words as artist
+                    title = words.slice(2).join(' '); // Rest as title
+                }
+            }
+        } else {
+            // Single word search - treat as title with unknown artist
+            title = term;
+            artist = '';
+        }
+    }
+    
+    // Clean up the results
+    artist = artist.replace(/[^\w\s&]/g, '').trim();
+    title = title.replace(/[^\w\s&']/g, '').trim();
+    
+    console.log(`🔍 Parsed search: Artist="${artist}", Title="${title}"`);
+    
+    return { artist, title };
 }
 
 // Cache web results for faster future access
