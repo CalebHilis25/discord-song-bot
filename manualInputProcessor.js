@@ -84,7 +84,6 @@ class ManualInputProcessor {
             
             if (content) {
                 console.log('📄 Content fetched, length:', content.length);
-                console.log('📄 Content preview:', content.substring(0, 200) + '...');
                 
                 // Try to extract song info from the content
                 const songInfo = this.extractSongInfoFromHTML(content, fullURL);
@@ -92,19 +91,10 @@ class ManualInputProcessor {
                 if (songInfo) {
                     if (message) await message.edit('✅ Successfully extracted lyrics from URL! Generating PDF...');
                     console.log('✅ Song extracted:', songInfo.title, 'by', songInfo.artist);
-                    console.log('📝 Lyrics lines count:', songInfo.lyrics?.length);
                     return songInfo;
                 } else {
                     console.log('❌ Could not extract song info from content');
-                    console.log('📄 Content sample for debugging:', content.substring(500, 1000));
-                    
-                    // Try a simpler extraction method
-                    console.log('🔄 Trying simpler extraction method...');
-                    const simpleExtraction = this.simpleTextExtraction(content, fullURL);
-                    if (simpleExtraction) {
-                        if (message) await message.edit('✅ Successfully extracted content with basic method! Generating PDF...');
-                        return simpleExtraction;
-                    }
+                    console.log('📄 Content preview:', content.substring(0, 500));
                 }
             } else {
                 console.log('❌ No content received from URL');
@@ -130,71 +120,38 @@ class ManualInputProcessor {
                 hostname: urlObj.hostname,
                 path: urlObj.pathname + urlObj.search,
                 method: 'GET',
-                timeout: 15000, // Increased timeout
+                timeout: 10000,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'Connection': 'keep-alive'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }
             };
 
-            console.log('🌐 Making request to:', `${urlObj.hostname}${urlObj.pathname}`);
-            console.log('📡 Request headers:', JSON.stringify(options.headers, null, 2));
-
             const req = https.request(options, (res) => {
-                console.log('📡 Response status:', res.statusCode);
-                console.log('📡 Response headers:', JSON.stringify(res.headers, null, 2));
+                let data = '';
                 
-                if (res.statusCode === 200) {
-                    let data = '';
-                    
-                    res.on('data', (chunk) => {
-                        data += chunk;
-                        // Limit data size to prevent memory issues
-                        if (data.length > 500000) { // 500KB limit
-                            console.log('⚠️ Content size limit reached, truncating...');
-                            req.destroy();
-                            resolve(data); // Return what we have so far
-                        }
-                    });
-                    
-                    res.on('end', () => {
-                        console.log('✅ Content received, final length:', data.length);
-                        resolve(data);
-                    });
-                } else if (res.statusCode === 301 || res.statusCode === 302) {
-                    // Handle redirects
-                    const redirectUrl = res.headers.location;
-                    console.log('🔄 Redirect to:', redirectUrl);
-                    if (redirectUrl) {
-                        // Resolve relative redirects
-                        const fullRedirectUrl = redirectUrl.startsWith('http') ? 
-                            redirectUrl : 
-                            `${urlObj.protocol}//${urlObj.hostname}${redirectUrl}`;
-                        this.fetchURLContent(fullRedirectUrl).then(resolve).catch(reject);
-                    } else {
-                        reject(new Error(`Redirect without location header: ${res.statusCode}`));
+                res.on('data', (chunk) => {
+                    data += chunk;
+                    // Limit data size to prevent memory issues
+                    if (data.length > 500000) { // 500KB limit
+                        req.destroy();
+                        reject(new Error('Content too large'));
                     }
-                } else {
-                    console.log('❌ HTTP Error:', res.statusCode, res.statusMessage);
-                    reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
-                }
+                });
+                
+                res.on('end', () => {
+                    resolve(data);
+                });
             });
 
             req.on('error', (error) => {
-                console.error('❌ Request error:', error.message);
-                console.error('❌ Error details:', error);
                 reject(error);
             });
 
             req.on('timeout', () => {
-                console.error('❌ Request timeout after 15 seconds');
                 req.destroy();
-                reject(new Error('Request timeout - website took too long to respond'));
+                reject(new Error('Request timeout'));
             });
 
-            req.setTimeout(15000);
             req.end();
         });
     }
@@ -219,8 +176,8 @@ class ManualInputProcessor {
             // Try to find chord/lyric content in the HTML
             let lyricsContent = this.extractChordsFromHTML(cleanText);
             
-            if (lyricsContent && lyricsContent.length > 5) {
-                console.log('🎵 Found lyrics content, lines count:', lyricsContent.length);
+            if (lyricsContent && lyricsContent.length > 50) {
+                console.log('🎵 Found lyrics content, length:', lyricsContent.length);
                 
                 // Use URL info for title/artist if available
                 const title = urlInfo?.title || 'Song from URL';
@@ -230,7 +187,7 @@ class ManualInputProcessor {
                     id: Date.now(),
                     title: title,
                     artist: artist,
-                    lyrics: lyricsContent, // Already an array now
+                    lyrics: lyricsContent.split('\n'),
                     source: "URL content",
                     disclaimer: "Content extracted from URL - ensure you have proper rights for distribution",
                     isWebResult: true,
@@ -249,104 +206,21 @@ class ManualInputProcessor {
 
     // Extract chords and lyrics from HTML content
     extractChordsFromHTML(html) {
-        console.log('🔍 Starting HTML extraction...');
-        
-        // First, try to find the specific song-area div
-        let songAreaMatch = html.match(/<div[^>]*class[^>]*song-area[^>]*>(.*?)<\/div>/is);
-        if (!songAreaMatch) {
-            // Try alternative patterns
-            songAreaMatch = html.match(/<div[^>]*song-area[^>]*>(.*?)<\/div>/is) ||
-                           html.match(/class="song-area"[^>]*>(.*?)<\/div>/is) ||
-                           html.match(/song-area[^>]*>(.*?)(?=<\/div>|<div|$)/is);
-        }
-        
-        let workingHtml = html;
-        
-        if (songAreaMatch) {
-            workingHtml = songAreaMatch[1] || songAreaMatch[0];
-            console.log('🎯 Found song-area div! Content length:', workingHtml.length);
-            console.log('🎵 Song area preview:', workingHtml.substring(0, 300));
-            
-            // Look for nested lyrics content within song-area
-            const lyricsMatch = workingHtml.match(/<div[^>]*class[^>]*lyrics[^>]*>(.*?)<\/div>/is) ||
-                               workingHtml.match(/<pre[^>]*class[^>]*verse[^>]*>(.*?)<\/pre>/is) ||
-                               workingHtml.match(/<pre[^>]*>(.*?)<\/pre>/is);
-            
-            if (lyricsMatch) {
-                workingHtml = lyricsMatch[1] || lyricsMatch[0];
-                console.log('🎼 Found nested lyrics content! Length:', workingHtml.length);
-                console.log('🎵 Lyrics preview:', workingHtml.substring(0, 200));
-            }
-        } else {
-            console.log('⚠️ No song-area div found, searching for content markers...');
-            
-            // Fallback: Look for common arkjuander.com markers
-            const songSectionMarkers = [
-                'INTRO:',
-                'VERSE1:',
-                'VERSE 1:',
-                'CHORUS:',
-                'F Bb /E Gm', // Known chord progression from this song
-                'ONE THING I DESIRE',
-                'LORD YOUR NAME'
-            ];
-            
-            let songStartIndex = -1;
-            for (const marker of songSectionMarkers) {
-                const index = html.toUpperCase().indexOf(marker);
-                if (index !== -1) {
-                    songStartIndex = index;
-                    console.log('🎯 Found song content starting at marker:', marker, 'at position', index);
-                    break;
-                }
-            }
-            
-            // If we found song content, extract a reasonable section around it
-            if (songStartIndex !== -1) {
-                // Extract from song start to end, or next 10000 chars
-                const songEndIndex = Math.min(songStartIndex + 10000, html.length);
-                workingHtml = html.substring(Math.max(0, songStartIndex - 500), songEndIndex);
-                console.log('🎵 Extracted song section, length:', workingHtml.length);
-            } else {
-                console.log('⚠️ No song content markers found, using full HTML');
-                // Try to find any section with chords
-                const chordPattern = /[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\s+[A-G]/g;
-                const chordMatches = html.match(chordPattern);
-                if (chordMatches && chordMatches.length > 3) {
-                    const firstChordIndex = html.indexOf(chordMatches[0]);
-                    if (firstChordIndex !== -1) {
-                        workingHtml = html.substring(firstChordIndex, Math.min(firstChordIndex + 8000, html.length));
-                        console.log('🎸 Found chord content, extracted section length:', workingHtml.length);
-                    }
-                }
-            }
-        }
-        
         // Remove all HTML tags but preserve line breaks
-        // Special handling for <pre> content which should preserve formatting
-        let text = workingHtml
-            .replace(/<pre[^>]*>/gi, '\n') // Start of pre becomes newline
-            .replace(/<\/pre>/gi, '\n')    // End of pre becomes newline
+        let text = html
             .replace(/<br\s*\/?>/gi, '\n')
             .replace(/<\/p>/gi, '\n')
             .replace(/<\/div>/gi, '\n')
-            .replace(/<[^>]*>/g, ' ')      // Remove remaining HTML tags
+            .replace(/<[^>]*>/g, ' ')
             .replace(/&nbsp;/g, ' ')
             .replace(/&amp;/g, '&')
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
-            .replace(/\s+/g, ' ')          // Normalize spaces
-            .replace(/\n\s+/g, '\n')       // Clean up line starts
-            .replace(/\s+\n/g, '\n')       // Clean up line ends
+            .replace(/\s+/g, ' ')
             .trim();
-
-        console.log('📄 Cleaned text length:', text.length);
-        console.log('📄 Text preview:', text.substring(0, 500));
 
         // Split into lines and clean up
         const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-        console.log('📝 Total lines after split:', lines.length);
-        
         const lyricsLines = [];
         const seenSections = new Set();
         
@@ -360,32 +234,21 @@ class ManualInputProcessor {
             
             // Detect arkjuander.com specific section markers
             const sectionMarkers = ['intro:', 'verse1:', 'verse2:', 'verse3:', 'verse4:', 'verse5:', 
-                                  'pre chorus:', 'chorus:', 'bridge:', 'bridge1:', 'bridge2:', 'outro:',
-                                  'verse:', 'bridge:', 'intro', 'outro'];
+                                  'pre chorus:', 'chorus:', 'bridge:', 'bridge1:', 'bridge2:', 'outro:'];
             
-            const isSection = sectionMarkers.some(marker => lowerLine.includes(marker)) ||
-                             /^(verse|chorus|bridge|intro|outro)(\s*\d*):\s*$/i.test(line.trim());
+            const isSection = sectionMarkers.some(marker => lowerLine.includes(marker));
             
-            // Also look for section markers without colons
-            const isSectionAlt = /^(INTRO|VERSE\d*|PRE CHORUS|CHORUS|BRIDGE\d*|OUTRO)\s*$/i.test(line.trim());
-            
-            if (isSection || isSectionAlt) {
-                console.log('🎵 Found section:', line);
+            if (isSection) {
                 inSongContent = true;
                 skipUntilNextSection = false;
-                let sectionName = line.replace(/:/g, '').toUpperCase().trim();
+                const sectionName = line.replace(/:/g, '').toUpperCase();
                 
                 // Avoid duplicate sections
                 if (!seenSections.has(sectionName)) {
                     seenSections.add(sectionName);
-                    // Add proper section formatting with empty line before (except first)
-                    if (lyricsLines.length > 0) {
-                        lyricsLines.push(''); // Empty line before section
-                    }
-                    lyricsLines.push(`[${sectionName}]`);
+                    lyricsLines.push(`\n[${sectionName}]`);
                     foundChords = true;
                 } else {
-                    console.log('⚠️ Skipping duplicate section:', sectionName);
                     skipUntilNextSection = true;
                 }
                 continue;
@@ -422,56 +285,21 @@ class ManualInputProcessor {
                 lowerLine.includes('check out our') ||
                 lowerLine.includes('set list builder') ||
                 lowerLine.includes('quick menu') ||
-                lowerLine.includes('doctype') ||
-                lowerLine.includes('<html') ||
-                lowerLine.includes('<head') ||
-                lowerLine.includes('<style') ||
-                lowerLine.includes('<script') ||
-                lowerLine.includes('charset') ||
                 line.length < 2) {
                 continue;
             }
             
-            // More aggressive song content detection
-            if (!inSongContent) {
-                // Look for any line with chord patterns or known lyrics
-                if (/\b[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\s+/.test(line) ||
-                    lowerLine.includes('one thing') ||
-                    lowerLine.includes('i desire') ||
-                    lowerLine.includes('lord your name') ||
-                    lowerLine.includes('jesus') ||
-                    lowerLine.includes('higher than') ||
-                    /^[A-Z\s]{8,50}$/.test(line.trim())) {
-                    console.log('🎵 Auto-detected song content:', line.substring(0, 50));
-                    inSongContent = true;
-                }
-            }
-            
-            // Skip if we haven't found song content yet
-            if (!inSongContent) continue;
-            
             // Check for chord patterns specific to arkjuander format
             const hasChords = /\b[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\b/.test(line) ||
                              /\/[A-G]/.test(line) || // Slash chords like /E
-                             /^[A-G#b\s\/]+$/.test(line.trim()) || // Pure chord lines
-                             /\b[A-G]\s+[A-G]/.test(line); // Multiple chords
+                             /^[A-G#b\s\/]+$/.test(line.trim()); // Pure chord lines
             
             // Check if it looks like lyrics (has vowels and meaningful length)
             const hasLyrics = line.length > 3 && 
                              !/^[A-G\s#b\/\-]+$/.test(line) &&
-                             /[aeiouAEIOU].*[aeiouAEIOU]/.test(line) && // At least 2 vowels
+                             /[aeiouAEIOU]/.test(line) &&
                              !lowerLine.includes('hillsong') &&
-                             !lowerLine.includes('worship') &&
-                             !lowerLine.includes('arkjuander') &&
-                             !lowerLine.includes('chords') &&
-                             !/^\s*\d+\s*$/.test(line); // Not just numbers
-            
-            // Also accept lines that are clearly song sections or content
-            const isSongContent = lowerLine.includes('one thing') ||
-                                 lowerLine.includes('i desire') ||
-                                 lowerLine.includes('lord your name') ||
-                                 lowerLine.includes('jesus') ||
-                                 /^[A-Z\s]{8,}$/.test(line.trim()) && line.length < 100; // All caps lyrics
+                             !lowerLine.includes('worship');
             
             // Clean the line
             let cleanLine = line
@@ -480,72 +308,25 @@ class ManualInputProcessor {
                 .trim();
             
             // Add valid content lines
-            if ((hasChords || hasLyrics || isSongContent) && cleanLine.length > 0) {
+            if ((hasChords || hasLyrics) && cleanLine.length > 0) {
                 // Format chord-only lines differently
-                if (hasChords && !hasLyrics && !isSongContent) {
+                if (hasChords && !hasLyrics) {
                     cleanLine = cleanLine.replace(/\s+/g, '  '); // Space out chords
                 }
                 
-                console.log('✅ Adding line:', cleanLine.substring(0, 50) + (cleanLine.length > 50 ? '...' : ''));
                 lyricsLines.push(cleanLine);
-                if (hasChords || isSongContent) foundChords = true;
+                if (hasChords) foundChords = true;
             }
         }
         
-        console.log(`🎵 Final result: ${lyricsLines.length} lines extracted, found chords: ${foundChords}`);
-        console.log('📋 First 5 lines:', lyricsLines.slice(0, 5));
+        console.log(`🎵 Extracted ${lyricsLines.length} lines from arkjuander.com, found chords: ${foundChords}`);
         
-        // Return the array directly instead of joining and splitting
-        return foundChords && lyricsLines.length > 3 ? lyricsLines : null;
-    }
-
-    // Simple text extraction as fallback
-    simpleTextExtraction(html, url) {
-        try {
-            console.log('🔄 Attempting simple text extraction...');
-            
-            // Very basic text extraction - just grab all text content
-            let text = html
-                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-                .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-                .replace(/<[^>]*>/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-            
-            // Look for common chord/lyrics patterns
-            const lines = text.split(/\s+/).join(' ').split(/[.!?]\s+/);
-            const lyricsLines = [];
-            
-            for (const line of lines) {
-                // Look for lines that might contain chords and lyrics
-                if (line.length > 10 && line.length < 200 && 
-                    (/\b[A-G](?:m|maj|min|dim|aug|sus|add)?\b/.test(line) ||
-                     /verse|chorus|bridge|intro/i.test(line))) {
-                    lyricsLines.push(line.trim());
-                }
-            }
-            
-            if (lyricsLines.length > 3) {
-                const urlInfo = this.extractTitleFromURL(url);
-                console.log('✅ Simple extraction found', lyricsLines.length, 'potential lyrics lines');
-                
-                return {
-                    id: Date.now(),
-                    title: urlInfo?.title || 'Song from URL',
-                    artist: urlInfo?.artist || 'Unknown Artist',
-                    lyrics: lyricsLines,
-                    source: "URL content (simple extraction)",
-                    disclaimer: "Content extracted using simple method - formatting may be basic",
-                    isWebResult: true,
-                    isManualInput: true
-                };
-            }
-            
-            return null;
-        } catch (error) {
-            console.error('Simple extraction error:', error.message);
-            return null;
-        }
+        // Join and clean up final result
+        let result = lyricsLines.join('\n')
+            .replace(/\n{3,}/g, '\n\n') // Remove excessive line breaks
+            .trim();
+        
+        return foundChords && result.length > 100 ? result : null;
     }
 
     // Extract title from URL
