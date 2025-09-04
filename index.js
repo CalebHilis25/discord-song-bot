@@ -22,11 +22,10 @@ const manualProcessor = new ManualInputProcessor();
 // Bot ready event
 client.once('ready', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}!`);
-    console.log(`🎵 Ready to provide song lyrics and chords!`);
-    console.log(`🌐 Enhanced with manual input & URL processing! v3.0`);
+    console.log(`🎵 Ready to process URLs and pasted lyrics!`);
+    console.log(`🚫 Manual Input ONLY Mode - No web searching! v4.0`);
     
-    // Auto-discover popular songs on startup (optional)
-    // setTimeout(autoDiscoverSongs, 5000); // Uncomment to enable auto-discovery
+    // Auto-discover disabled in manual-only mode
 });
 
 // Message handler
@@ -39,26 +38,20 @@ client.on('messageCreate', async (message) => {
         const userInput = message.content.trim();
         
         if (userInput.length > 0) {
-            // Show searching indicator
-            const searchMessage = await message.reply('🔍 Processing your input... (checking for URLs, lyrics, or song titles)');
+            // Show processing indicator
+            const searchMessage = await message.reply('🔍 Processing your input... (checking for URLs or pasted lyrics)');
             
             try {
                 console.log('📥 User input received:', userInput);
                 console.log('🔍 Input length:', userInput.length);
                 console.log('🌐 Is URL?', userInput.startsWith('http'));
                 
-                // First try manual input processing (URLs or pasted lyrics)
+                // ONLY try manual input processing (URLs or pasted lyrics) - NO WEB SEARCH
                 let song = await manualProcessor.processUserInput(userInput, searchMessage);
-                
-                // If not manual input, try regular song search
-                if (!song) {
-                    await searchMessage.edit('🔍 Searching for your song... (checking local database and web sources)');
-                    song = await searchSong(userInput);
-                }
                 
                 if (song) {
                     // Update search message
-                    await searchMessage.edit('📄 Found song! Generating PDF...');
+                    await searchMessage.edit('📄 Found content! Generating PDF...');
                     
                     // Generate PDF
                     const pdfPath = await generatePDF(song);
@@ -105,17 +98,14 @@ client.on('messageCreate', async (message) => {
                     }, 5000);
                     
                 } else {
-                    // Try to get suggestions
-                    const suggestions = await getSongSuggestions(userInput);
-                    
-                    let responseMessage = `❌ Sorry, I couldn't find "${userInput}" in my database or on the web.\n\n💡 **Try these options:**\n`;
-                    
-                    if (suggestions.length > 0) {
-                        responseMessage += suggestions.slice(0, 3).map(s => `• ${s}`).join('\n');
-                        responseMessage += `\n\n🔗 **Or try:**\n• Paste the full lyrics with chords directly\n• Share a URL to the song lyrics\n• Use format: "Artist - Song Title"`;
-                    } else {
-                        responseMessage += `• Search more specifically: "Artist - Song Title"\n• **Paste the full lyrics/chords directly**\n• **Share a URL to the song lyrics**\n• Check spelling and try again`;
-                    }
+                    // No manual input detected - provide clear instructions
+                    let responseMessage = `❌ I can only process:\n\n` +
+                        `🔗 **URLs**: Paste a link to chord/lyrics websites\n` +
+                        `📝 **Complete Lyrics**: Paste the full song with chords\n\n` +
+                        `**Examples:**\n` +
+                        `• \`https://tabs.ultimate-guitar.com/tab/artist/song\`\n` +
+                        `• Paste complete lyrics like:\n\`\`\`\n[Verse 1]\nG    D\nAmazing grace\nAm   C\nHow sweet...\`\`\`\n\n` +
+                        `❌ **I no longer search by song title** - you must provide the actual content!`;
                     
                     await searchMessage.edit(responseMessage);
                 }
@@ -131,80 +121,28 @@ client.on('messageCreate', async (message) => {
     if (message.content === '!help') {
         await message.reply({
             content: `🎵 **Discord Song Bot Help** 🎵\n\n` +
-                    `📝 **How to use:**\n` +
-                    `• **Type a song title**: \`Blinding Lights\`\n` +
-                    `• **Paste full lyrics & chords**: Copy/paste complete song content\n` +
-                    `• **Share a URL**: Link to lyrics websites\n` +
-                    `• **Specify artist**: \`The Weeknd - Blinding Lights\`\n\n` +
-                    `🔗 **New Features:**\n` +
-                    `• **URL Processing**: Paste links to chord/lyrics sites\n` +
-                    `• **Manual Input**: Paste complete lyrics with chords\n` +
-                    `• **Auto-Format**: Bot extracts title/artist automatically\n` +
-                    `• **Smart Detection**: Recognizes URLs vs lyrics vs song titles\n\n` +
-                    `🌐 **Search Sources:**\n` +
-                    `• Manual input (most reliable)\n` +
-                    `• URL content extraction\n` +
-                    `• Local database\n` +
-                    `• Web search\n\n` +
+                    `📝 **How to use (2 methods only):**\n\n` +
+                    `🔗 **Method 1: Paste URL**\n` +
+                    `• Copy link from Ultimate Guitar, ChordU, etc.\n` +
+                    `• Example: \`https://tabs.ultimate-guitar.com/tab/artist/song\`\n\n` +
+                    `� **Method 2: Paste Complete Lyrics**\n` +
+                    `• Copy the full song with chords from any source\n` +
+                    `• Example:\n\`\`\`[Verse 1]\nG                D\nAmazing grace how sweet\nAm               C\nThe sound that saved...\`\`\`\n\n` +
+                    `❌ **No longer supported:**\n` +
+                    `• Song title searches\n` +
+                    `• Artist searches\n` +
+                    `• Web searching by name\n\n` +
                     `📄 **PDF Features:**\n` +
                     `• 2-column layout\n` +
                     `• Bold song titles\n` +
                     `• 11pt font size\n` +
-                    `• Lyrics with chords\n` +
-                    `• Ready to download\n\n` +
+                    `• Perfect chord formatting\n\n` +
                     `❓ **Commands:**\n` +
-                    `• \`!help\` - Show this help message\n` +
-                    `• \`!list\` - Show available songs\n` +
-                    `• \`!discover\` - Auto-discover popular songs\n\n` +
+                    `• \`!help\` - Show this help\n` +
+                    `• \`!test <url>\` - Test URL detection\n\n` +
                     `⚠️ **Legal Notice:**\n` +
-                    `User-provided content responsibility lies with the user. Ensure proper rights for distribution.`
+                    `User-provided content responsibility lies with the user.`
         });
-    }
-    
-    // List available songs
-    if (message.content === '!list') {
-        const { getAllSongs } = require('./songDatabase');
-        const songs = getAllSongs();
-        
-        if (songs.length > 0) {
-            const localSongs = songs.filter(s => !s.cached);
-            const cachedSongs = songs.filter(s => s.cached);
-            
-            let songList = `🎵 **Available Songs** (${songs.length} total):\n\n`;
-            
-            if (localSongs.length > 0) {
-                songList += `**📁 Local Database:**\n`;
-                songList += localSongs.map(song => `• **${song.title}** by ${song.artist}`).join('\n');
-                songList += '\n\n';
-            }
-            
-            if (cachedSongs.length > 0) {
-                songList += `**🌐 Web Cache:**\n`;
-                songList += cachedSongs.slice(0, 10).map(song => `• **${song.title}** by ${song.artist}`).join('\n');
-                if (cachedSongs.length > 10) {
-                    songList += `\n• ... and ${cachedSongs.length - 10} more`;
-                }
-            }
-            
-            songList += `\n\n💡 Just type the song title to get lyrics and PDF!`;
-            
-            await message.reply({ content: songList });
-        } else {
-            await message.reply('📝 No songs available yet. Try searching for a song to add it to the cache!');
-        }
-    }
-    
-    // Manual discovery command
-    if (message.content === '!discover') {
-        const discoveryMessage = await message.reply('🔍 Discovering popular songs from the web...');
-        
-        try {
-            await autoDiscoverSongs();
-            await discoveryMessage.edit('✅ Auto-discovery complete! New songs have been added to the cache. Use `!list` to see them.');
-        } catch (error) {
-            console.error('Discovery error:', error);
-            await discoveryMessage.edit('❌ Error during auto-discovery. Please try again later.');
-        }
     }
 
     // Test URL processing command
