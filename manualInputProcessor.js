@@ -251,45 +251,62 @@ class ManualInputProcessor {
     extractChordsFromHTML(html) {
         console.log('🔍 Starting HTML extraction...');
         
-        // First, let's find the actual song content section in the HTML
-        // Look for common arkjuander.com markers
-        const songSectionMarkers = [
-            'INTRO:',
-            'VERSE1:',
-            'VERSE 1:',
-            'CHORUS:',
-            'F Bb /E Gm', // Known chord progression from this song
-            'ONE THING I DESIRE',
-            'LORD YOUR NAME'
-        ];
-        
-        let songStartIndex = -1;
-        for (const marker of songSectionMarkers) {
-            const index = html.toUpperCase().indexOf(marker);
-            if (index !== -1) {
-                songStartIndex = index;
-                console.log('🎯 Found song content starting at marker:', marker, 'at position', index);
-                break;
-            }
+        // First, try to find the specific song-area div
+        let songAreaMatch = html.match(/<div[^>]*class[^>]*song-area[^>]*>(.*?)<\/div>/is);
+        if (!songAreaMatch) {
+            // Try alternative patterns
+            songAreaMatch = html.match(/<div[^>]*song-area[^>]*>(.*?)<\/div>/is) ||
+                           html.match(/class="song-area"[^>]*>(.*?)<\/div>/is) ||
+                           html.match(/song-area[^>]*>(.*?)(?=<\/div>|<div|$)/is);
         }
         
-        // If we found song content, extract a reasonable section around it
         let workingHtml = html;
-        if (songStartIndex !== -1) {
-            // Extract from song start to end, or next 10000 chars
-            const songEndIndex = Math.min(songStartIndex + 10000, html.length);
-            workingHtml = html.substring(Math.max(0, songStartIndex - 500), songEndIndex);
-            console.log('🎵 Extracted song section, length:', workingHtml.length);
+        
+        if (songAreaMatch) {
+            workingHtml = songAreaMatch[1] || songAreaMatch[0];
+            console.log('🎯 Found song-area div! Content length:', workingHtml.length);
+            console.log('🎵 Song area preview:', workingHtml.substring(0, 300));
         } else {
-            console.log('⚠️ No song content markers found, using full HTML');
-            // Try to find any section with chords
-            const chordPattern = /[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\s+[A-G]/g;
-            const chordMatches = html.match(chordPattern);
-            if (chordMatches && chordMatches.length > 3) {
-                const firstChordIndex = html.indexOf(chordMatches[0]);
-                if (firstChordIndex !== -1) {
-                    workingHtml = html.substring(firstChordIndex, Math.min(firstChordIndex + 8000, html.length));
-                    console.log('🎸 Found chord content, extracted section length:', workingHtml.length);
+            console.log('⚠️ No song-area div found, searching for content markers...');
+            
+            // Fallback: Look for common arkjuander.com markers
+            const songSectionMarkers = [
+                'INTRO:',
+                'VERSE1:',
+                'VERSE 1:',
+                'CHORUS:',
+                'F Bb /E Gm', // Known chord progression from this song
+                'ONE THING I DESIRE',
+                'LORD YOUR NAME'
+            ];
+            
+            let songStartIndex = -1;
+            for (const marker of songSectionMarkers) {
+                const index = html.toUpperCase().indexOf(marker);
+                if (index !== -1) {
+                    songStartIndex = index;
+                    console.log('🎯 Found song content starting at marker:', marker, 'at position', index);
+                    break;
+                }
+            }
+            
+            // If we found song content, extract a reasonable section around it
+            if (songStartIndex !== -1) {
+                // Extract from song start to end, or next 10000 chars
+                const songEndIndex = Math.min(songStartIndex + 10000, html.length);
+                workingHtml = html.substring(Math.max(0, songStartIndex - 500), songEndIndex);
+                console.log('🎵 Extracted song section, length:', workingHtml.length);
+            } else {
+                console.log('⚠️ No song content markers found, using full HTML');
+                // Try to find any section with chords
+                const chordPattern = /[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\s+[A-G]/g;
+                const chordMatches = html.match(chordPattern);
+                if (chordMatches && chordMatches.length > 3) {
+                    const firstChordIndex = html.indexOf(chordMatches[0]);
+                    if (firstChordIndex !== -1) {
+                        workingHtml = html.substring(firstChordIndex, Math.min(firstChordIndex + 8000, html.length));
+                        console.log('🎸 Found chord content, extracted section length:', workingHtml.length);
+                    }
                 }
             }
         }

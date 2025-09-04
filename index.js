@@ -55,6 +55,43 @@ client.on('messageCreate', async (message) => {
         return;
     }
 
+    // Debug HTML structure
+    if (input.startsWith('!debhtml')) {
+        const url = input.replace('!debhtml', '').trim() || 'https://arkjuander.com/lyrics-and-chords/one-thing-hillsong-worship';
+        const testMsg = await message.reply(`🔍 **Debugging HTML Structure**\n\nURL: ${url}\nStatus: Fetching...`);
+        
+        try {
+            const content = await manualProcessor.fetchURLContent(url);
+            if (content) {
+                // Find all div classes
+                const divMatches = content.match(/<div[^>]*class="[^"]*"[^>]*>/g) || [];
+                const classes = divMatches.map(div => {
+                    const classMatch = div.match(/class="([^"]*)"/);
+                    return classMatch ? classMatch[1] : 'no-class';
+                }).slice(0, 20); // Limit to first 20
+                
+                // Look for song-area specifically
+                const songAreaMatches = content.match(/song-area/gi) || [];
+                
+                let result = `**Div Classes Found (first 20):**\n`;
+                result += classes.map(cls => `• ${cls}`).join('\n');
+                result += `\n\n**Song-area matches:** ${songAreaMatches.length}`;
+                
+                if (songAreaMatches.length > 0) {
+                    const songAreaContext = content.match(/.{0,100}song-area.{0,100}/gi);
+                    result += `\n\n**Song-area context:**\n${songAreaContext?.[0] || 'Not found'}`;
+                }
+                
+                await testMsg.edit(result);
+            } else {
+                await testMsg.edit('❌ Could not fetch content');
+            }
+        } catch (error) {
+            await testMsg.edit(`❌ Error: ${error.message}`);
+        }
+        return;
+    }
+
     // Simple network test
     if (input.startsWith('!testnet')) {
         const testMsg = await message.reply('🌐 Testing network connectivity...');
