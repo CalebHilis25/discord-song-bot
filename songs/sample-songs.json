@@ -1,0 +1,38 @@
+[
+    {
+        "id": 1,
+        "title": "Sample Worship Song",
+        "artist": "Sample Artist",
+        "lyrics": [
+            "[Verse 1]",
+            "G               D",
+            "This is a sample song",
+            "Em              C", 
+            "For demonstration only",
+            "G               D",
+            "Replace with your content",
+            "Em              C",
+            "Following copyright laws",
+            "",
+            "[Chorus]",
+            "C               G",
+            "Always respect artist rights",
+            "D               Em",
+            "Use legal sources only",
+            "C               G",
+            "This is just a template",
+            "D               G",
+            "For your own original work",
+            "",
+            "[Verse 2]", 
+            "G               D",
+            "Add your own lyrics here",
+            "Em              C",
+            "Make sure you have permission",
+            "G               D",
+            "For any copyrighted content",
+            "Em              C",
+            "That you want to include"
+        ]
+    }
+]
