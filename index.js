@@ -43,6 +43,10 @@ client.on('messageCreate', async (message) => {
             const searchMessage = await message.reply('🔍 Processing your input... (checking for URLs, lyrics, or song titles)');
             
             try {
+                console.log('📥 User input received:', userInput);
+                console.log('🔍 Input length:', userInput.length);
+                console.log('🌐 Is URL?', userInput.startsWith('http'));
+                
                 // First try manual input processing (URLs or pasted lyrics)
                 let song = await manualProcessor.processUserInput(userInput, searchMessage);
                 
@@ -200,6 +204,19 @@ client.on('messageCreate', async (message) => {
         } catch (error) {
             console.error('Discovery error:', error);
             await discoveryMessage.edit('❌ Error during auto-discovery. Please try again later.');
+        }
+    }
+
+    // Test URL processing command
+    if (message.content.startsWith('!test ')) {
+        const testURL = message.content.replace('!test ', '').trim();
+        const testMessage = await message.reply(`🧪 Testing URL processing for: ${testURL}`);
+        
+        try {
+            const isURL = manualProcessor.isURL(testURL);
+            await testMessage.edit(`🧪 URL Detection: ${isURL ? '✅ Valid URL' : '❌ Not detected as URL'}\nInput: ${testURL}`);
+        } catch (error) {
+            await testMessage.edit(`❌ Test error: ${error.message}`);
         }
     }
 });

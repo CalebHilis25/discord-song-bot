@@ -28,8 +28,22 @@ class ManualInputProcessor {
     // Check if input is a URL
     isURL(input) {
         try {
-            const url = new URL(input);
-            return url.protocol === 'http:' || url.protocol === 'https:';
+            // More flexible URL detection
+            if (input.startsWith('http://') || input.startsWith('https://')) {
+                const url = new URL(input);
+                return url.protocol === 'http:' || url.protocol === 'https:';
+            }
+            
+            // Also check for common URL patterns without protocol
+            if (input.includes('ultimate-guitar.com') || 
+                input.includes('tabs.ultimate-guitar.com') ||
+                input.includes('chordu.com') ||
+                input.includes('azchords.com') ||
+                input.includes('.com') && input.includes('/')) {
+                return true;
+            }
+            
+            return false;
         } catch {
             return false;
         }
@@ -49,26 +63,42 @@ class ManualInputProcessor {
     // Process URL (fetch content from website)
     async processURL(url, message) {
         try {
+            console.log('🔗 Processing URL:', url);
             await message.edit('🔗 Processing URL... Fetching content from website...');
             
-            const content = await this.fetchURLContent(url);
+            // Ensure URL has protocol
+            let fullURL = url;
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                fullURL = 'https://' + url;
+            }
+            
+            console.log('🌐 Full URL:', fullURL);
+            
+            const content = await this.fetchURLContent(fullURL);
             
             if (content) {
+                console.log('📄 Content fetched, length:', content.length);
+                
                 // Try to extract song info from the content
-                const songInfo = this.extractSongInfoFromHTML(content, url);
+                const songInfo = this.extractSongInfoFromHTML(content, fullURL);
                 
                 if (songInfo) {
                     await message.edit('✅ Successfully extracted lyrics from URL! Generating PDF...');
+                    console.log('✅ Song extracted:', songInfo.title, 'by', songInfo.artist);
                     return songInfo;
+                } else {
+                    console.log('❌ Could not extract song info from content');
                 }
+            } else {
+                console.log('❌ No content received from URL');
             }
             
-            await message.edit('❌ Could not extract lyrics from this URL. Try pasting the lyrics directly instead.');
+            await message.edit('❌ Could not extract lyrics from this URL. The site might not be supported or content is not accessible. Try pasting the lyrics directly instead.');
             return null;
             
         } catch (error) {
             console.error('URL processing error:', error.message);
-            await message.edit('❌ Error processing URL. Please paste the lyrics directly.');
+            await message.edit(`❌ Error processing URL: ${error.message}. Please paste the lyrics directly.`);
             return null;
         }
     }
@@ -121,26 +151,43 @@ class ManualInputProcessor {
     // Extract song information from HTML content
     extractSongInfoFromHTML(html, url) {
         try {
-            // Simple text extraction (without complex HTML parsing)
-            const text = html
+            console.log('🔍 Extracting song info from HTML...');
+            
+            // Remove script and style tags completely
+            let cleanText = html
                 .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
                 .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-                .replace(/<[^>]*>/g, ' ')
-                .replace(/&nbsp;/g, ' ')
-                .replace(/&amp;/g, '&')
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/\s+/g, ' ');
+                .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, '')
+                .replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, '')
+                .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, '');
 
-            // Try to find title in text or URL
-            const title = this.extractTitleFromURL(url) || 'Song from URL';
-            const artist = 'Unknown Artist';
+            // Extract title and artist from URL first
+            const urlInfo = this.extractTitleFromURL(url);
+            console.log('📝 URL info:', urlInfo);
 
-            // If the content looks like lyrics, process it
-            if (this.looksLikeLyrics(text)) {
-                return this.processLyricsText(text, null, title, artist);
+            // Try to find chord/lyric content in the HTML
+            let lyricsContent = this.extractChordsFromHTML(cleanText);
+            
+            if (lyricsContent && lyricsContent.length > 50) {
+                console.log('🎵 Found lyrics content, length:', lyricsContent.length);
+                
+                // Use URL info for title/artist if available
+                const title = urlInfo?.title || 'Song from URL';
+                const artist = urlInfo?.artist || 'Unknown Artist';
+                
+                return {
+                    id: Date.now(),
+                    title: title,
+                    artist: artist,
+                    lyrics: lyricsContent.split('\n'),
+                    source: "URL content",
+                    disclaimer: "Content extracted from URL - ensure you have proper rights for distribution",
+                    isWebResult: true,
+                    isManualInput: true
+                };
             }
 
+            console.log('❌ No suitable lyrics content found in HTML');
             return null;
             
         } catch (error) {
@@ -149,22 +196,104 @@ class ManualInputProcessor {
         }
     }
 
+    // Extract chords and lyrics from HTML content
+    extractChordsFromHTML(html) {
+        // Remove all HTML tags but preserve line breaks
+        let text = html
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/<\/div>/gi, '\n')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // Split into lines and filter for chord patterns
+        const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        const lyricsLines = [];
+        
+        let foundChords = false;
+        
+        for (const line of lines) {
+            // Check if line contains chord patterns
+            const hasChords = /\b[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\b/.test(line);
+            const hasLyrics = line.length > 10 && !/^[A-G\s#b]+$/.test(line);
+            
+            // Skip navigation, advertisement, and other non-content
+            if (line.toLowerCase().includes('advertisement') ||
+                line.toLowerCase().includes('subscribe') ||
+                line.toLowerCase().includes('ultimate guitar') ||
+                line.toLowerCase().includes('tab by') ||
+                line.toLowerCase().includes('capo') ||
+                line.length < 3) {
+                continue;
+            }
+            
+            // Look for verse, chorus, bridge markers
+            if (line.toLowerCase().includes('verse') ||
+                line.toLowerCase().includes('chorus') ||
+                line.toLowerCase().includes('bridge') ||
+                line.toLowerCase().includes('intro') ||
+                line.toLowerCase().includes('outro')) {
+                lyricsLines.push(`[${line}]`);
+                foundChords = true;
+                continue;
+            }
+            
+            // Add lines with chords or lyrics
+            if (hasChords || hasLyrics) {
+                lyricsLines.push(line);
+                if (hasChords) foundChords = true;
+            }
+        }
+        
+        return foundChords && lyricsLines.length > 5 ? lyricsLines.join('\n') : null;
+    }
+
     // Extract title from URL
     extractTitleFromURL(url) {
         try {
             const urlObj = new URL(url);
+            console.log('🔍 Parsing URL:', url);
+            
+            // Handle ultimate-guitar.com URLs specifically
+            if (urlObj.hostname.includes('ultimate-guitar.com')) {
+                const pathParts = urlObj.pathname.split('/').filter(part => part.length > 0);
+                console.log('📂 Path parts:', pathParts);
+                
+                // Format: /tab/artist/song-title-chords-123456
+                if (pathParts.length >= 3 && pathParts[0] === 'tab') {
+                    const artist = pathParts[1].replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+                    let songTitle = pathParts[2]
+                        .replace(/-chords.*$/i, '')
+                        .replace(/-tabs.*$/i, '')
+                        .replace(/-/g, ' ')
+                        .replace(/\b\w/g, char => char.toUpperCase());
+                    
+                    console.log('🎵 Extracted from UG URL:', { artist, title: songTitle });
+                    return { artist, title: songTitle };
+                }
+            }
+            
+            // Generic URL parsing
             const pathParts = urlObj.pathname.split('/').filter(part => part.length > 0);
             
             if (pathParts.length > 0) {
                 const lastPart = pathParts[pathParts.length - 1];
-                return lastPart
+                const title = lastPart
                     .replace(/\.(html|htm|php|aspx?)$/i, '')
                     .replace(/[-_]/g, ' ')
                     .replace(/\b\w/g, char => char.toUpperCase());
+                
+                return { artist: 'Unknown Artist', title };
             }
             
             return null;
-        } catch {
+        } catch (error) {
+            console.error('URL parsing error:', error.message);
             return null;
         }
     }
