@@ -20,9 +20,10 @@ const manualProcessor = new ManualInputProcessor();
 // Bot ready event
 client.once('ready', async () => {
     console.log(`✅ Bot ONLINE: ${client.user.tag}`);
-    console.log(`🎵 MANUAL INPUT ONLY - v4.0.0`);
+    console.log(`🎵 SINGLE INSTANCE - MANUAL INPUT ONLY - v4.0.0`);
     console.log(`🔗 URL + Lyrics Processing ONLY`);
     console.log(`❌ NO WEB SEARCH FUNCTIONALITY`);
+    console.log(`🚫 LOCAL BOT STOPPED - RAILWAY ONLY`);
 });
 
 // Message handler
