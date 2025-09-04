@@ -176,8 +176,8 @@ class ManualInputProcessor {
             // Try to find chord/lyric content in the HTML
             let lyricsContent = this.extractChordsFromHTML(cleanText);
             
-            if (lyricsContent && lyricsContent.length > 50) {
-                console.log('🎵 Found lyrics content, length:', lyricsContent.length);
+            if (lyricsContent && lyricsContent.length > 5) {
+                console.log('🎵 Found lyrics content, lines count:', lyricsContent.length);
                 
                 // Use URL info for title/artist if available
                 const title = urlInfo?.title || 'Song from URL';
@@ -187,7 +187,7 @@ class ManualInputProcessor {
                     id: Date.now(),
                     title: title,
                     artist: artist,
-                    lyrics: lyricsContent.split('\n'),
+                    lyrics: lyricsContent, // Already an array now
                     source: "URL content",
                     disclaimer: "Content extracted from URL - ensure you have proper rights for distribution",
                     isWebResult: true,
@@ -241,12 +241,16 @@ class ManualInputProcessor {
             if (isSection) {
                 inSongContent = true;
                 skipUntilNextSection = false;
-                const sectionName = line.replace(/:/g, '').toUpperCase();
+                let sectionName = line.replace(/:/g, '').toUpperCase().trim();
                 
                 // Avoid duplicate sections
                 if (!seenSections.has(sectionName)) {
                     seenSections.add(sectionName);
-                    lyricsLines.push(`\n[${sectionName}]`);
+                    // Add proper section formatting with empty line before (except first)
+                    if (lyricsLines.length > 0) {
+                        lyricsLines.push(''); // Empty line before section
+                    }
+                    lyricsLines.push(`[${sectionName}]`);
                     foundChords = true;
                 } else {
                     skipUntilNextSection = true;
@@ -321,12 +325,8 @@ class ManualInputProcessor {
         
         console.log(`🎵 Extracted ${lyricsLines.length} lines from arkjuander.com, found chords: ${foundChords}`);
         
-        // Join and clean up final result
-        let result = lyricsLines.join('\n')
-            .replace(/\n{3,}/g, '\n\n') // Remove excessive line breaks
-            .trim();
-        
-        return foundChords && result.length > 100 ? result : null;
+        // Return the array directly instead of joining and splitting
+        return foundChords && lyricsLines.length > 5 ? lyricsLines : null;
     }
 
     // Extract title from URL
