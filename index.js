@@ -55,6 +55,32 @@ client.on('messageCreate', async (message) => {
         return;
     }
 
+    // Simple network test
+    if (input.startsWith('!testnet')) {
+        const testMsg = await message.reply('🌐 Testing network connectivity...');
+        
+        try {
+            const https = require('https');
+            const testUrl = 'https://httpbin.org/get';
+            
+            const result = await new Promise((resolve, reject) => {
+                const req = https.request(testUrl, { timeout: 10000 }, (res) => {
+                    let data = '';
+                    res.on('data', chunk => data += chunk);
+                    res.on('end', () => resolve(data));
+                });
+                req.on('error', reject);
+                req.on('timeout', () => reject(new Error('Timeout')));
+                req.end();
+            });
+            
+            await testMsg.edit(`✅ Network connectivity OK!\nResponse length: ${result.length} chars`);
+        } catch (error) {
+            await testMsg.edit(`❌ Network test failed: ${error.message}`);
+        }
+        return;
+    }
+
     // Test URL processing specifically
     if (input.startsWith('!testurl')) {
         const url = input.replace('!testurl', '').trim() || 'https://arkjuander.com/lyrics-and-chords/one-thing-hillsong-worship';
@@ -68,18 +94,34 @@ client.on('messageCreate', async (message) => {
             let result = `URL Detection: ${isURL ? '✅' : '❌'}\n\n`;
             
             if (isURL) {
-                result += `🔗 **Processing URL...**\n`;
-                await testMsg.edit(result + `Status: Fetching content...`);
+                result += `🔗 **Step 1: URL Detection** ✅\n`;
+                await testMsg.edit(result + `🌐 **Step 2: Fetching content...**`);
                 
-                const song = await manualProcessor.processURL(url, testMsg);
-                if (song) {
-                    result += `✅ **SUCCESS!**\n`;
-                    result += `Title: ${song.title}\n`;
-                    result += `Artist: ${song.artist}\n`;
-                    result += `Lines: ${song.lyrics?.length || 0}\n`;
-                    result += `Sample: ${song.lyrics?.slice(0, 3)?.join(' | ') || 'None'}`;
-                } else {
-                    result += `❌ **FAILED** to extract content\nCheck Railway logs for details.`;
+                // Test content fetching directly
+                try {
+                    const content = await manualProcessor.fetchURLContent(url);
+                    if (content && content.length > 0) {
+                        result += `📄 **Step 2: Content Fetch** ✅ (${content.length} chars)\n`;
+                        await testMsg.edit(result + `🔍 **Step 3: Extracting lyrics...**`);
+                        
+                        // Test song extraction
+                        const song = await manualProcessor.extractSongInfoFromHTML(content, url);
+                        if (song) {
+                            result += `🎵 **Step 3: Lyrics Extraction** ✅\n`;
+                            result += `**Title:** ${song.title}\n`;
+                            result += `**Artist:** ${song.artist}\n`;
+                            result += `**Lines:** ${song.lyrics?.length || 0}\n`;
+                            result += `**Sample:** ${song.lyrics?.slice(0, 2)?.join(' | ') || 'None'}`;
+                        } else {
+                            result += `🎵 **Step 3: Lyrics Extraction** ❌\n`;
+                            result += `Content preview: ${content.substring(0, 200)}...`;
+                        }
+                    } else {
+                        result += `📄 **Step 2: Content Fetch** ❌ (Empty response)`;
+                    }
+                } catch (fetchError) {
+                    result += `📄 **Step 2: Content Fetch** ❌\n`;
+                    result += `**Error:** ${fetchError.message}`;
                 }
             } else {
                 result += `❌ URL not recognized as supported site`;
