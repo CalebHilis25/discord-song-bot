@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const { searchSong, autoDiscoverSongs, getSongSuggestions } = require('./songDatabase');
 const { generatePDF } = require('./pdfGenerator');
+const { ManualInputProcessor } = require('./manualInputProcessor');
 
 // Create Discord client
 const client = new Client({
@@ -15,11 +16,14 @@ const client = new Client({
     ]
 });
 
+// Initialize manual input processor
+const manualProcessor = new ManualInputProcessor();
+
 // Bot ready event
 client.once('ready', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}!`);
     console.log(`🎵 Ready to provide song lyrics and chords!`);
-    console.log(`🌐 Web search capabilities enabled! v2.0`);
+    console.log(`🌐 Enhanced with manual input & URL processing! v3.0`);
     
     // Auto-discover popular songs on startup (optional)
     // setTimeout(autoDiscoverSongs, 5000); // Uncomment to enable auto-discovery
@@ -32,15 +36,21 @@ client.on('messageCreate', async (message) => {
 
     // Simple song search - any message that doesn't start with ! is treated as song search
     if (!message.content.startsWith('!')) {
-        const songTitle = message.content.trim();
+        const userInput = message.content.trim();
         
-        if (songTitle.length > 0) {
+        if (userInput.length > 0) {
             // Show searching indicator
-            const searchMessage = await message.reply('🔍 Searching for your song... (checking local database and web sources)');
+            const searchMessage = await message.reply('🔍 Processing your input... (checking for URLs, lyrics, or song titles)');
             
             try {
-                // Search for the song (now includes web search)
-                const song = await searchSong(songTitle);
+                // First try manual input processing (URLs or pasted lyrics)
+                let song = await manualProcessor.processUserInput(userInput, searchMessage);
+                
+                // If not manual input, try regular song search
+                if (!song) {
+                    await searchMessage.edit('🔍 Searching for your song... (checking local database and web sources)');
+                    song = await searchSong(userInput);
+                }
                 
                 if (song) {
                     // Update search message
@@ -57,9 +67,16 @@ client.on('messageCreate', async (message) => {
                     // Prepare response message
                     let responseContent = `🎵 **${song.title}** by ${song.artist}\n\n📄 Here's your PDF with lyrics and chords!\n✨ Format: 2 columns, bold title, 11pt font`;
                     
-                    // Add source information if it's a web result
+                    // Add source information
                     if (song.isWebResult) {
-                        responseContent += `\n\n� **Source**: Found on ${song.source}`;
+                        responseContent += `\n\n🌐 **Source**: Found on ${song.source}`;
+                        if (song.disclaimer) {
+                            responseContent += `\n⚠️ **Note**: ${song.disclaimer}`;
+                        }
+                    }
+                    
+                    if (song.isManualInput) {
+                        responseContent += `\n\n📝 **Source**: User-provided content`;
                         if (song.disclaimer) {
                             responseContent += `\n⚠️ **Note**: ${song.disclaimer}`;
                         }
@@ -85,22 +102,22 @@ client.on('messageCreate', async (message) => {
                     
                 } else {
                     // Try to get suggestions
-                    const suggestions = await getSongSuggestions(songTitle);
+                    const suggestions = await getSongSuggestions(userInput);
                     
-                    let responseMessage = `❌ Sorry, I couldn't find "${songTitle}" in my database or on the web.\n\n💡 **Suggestions:**\n`;
+                    let responseMessage = `❌ Sorry, I couldn't find "${userInput}" in my database or on the web.\n\n💡 **Try these options:**\n`;
                     
                     if (suggestions.length > 0) {
                         responseMessage += suggestions.slice(0, 3).map(s => `• ${s}`).join('\n');
-                        responseMessage += `\n\n� Try searching with more specific terms like "artist - song title"`;
+                        responseMessage += `\n\n🔗 **Or try:**\n• Paste the full lyrics with chords directly\n• Share a URL to the song lyrics\n• Use format: "Artist - Song Title"`;
                     } else {
-                        responseMessage += `• Try being more specific with artist name\n• Check spelling\n• Use format: "Artist - Song Title"`;
+                        responseMessage += `• Search more specifically: "Artist - Song Title"\n• **Paste the full lyrics/chords directly**\n• **Share a URL to the song lyrics**\n• Check spelling and try again`;
                     }
                     
                     await searchMessage.edit(responseMessage);
                 }
                 
             } catch (error) {
-                console.error('Error processing song request:', error);
+                console.error('Error processing user input:', error);
                 await searchMessage.edit('❌ Sorry, there was an error processing your request. Please try again!');
             }
         }
@@ -111,14 +128,20 @@ client.on('messageCreate', async (message) => {
         await message.reply({
             content: `🎵 **Discord Song Bot Help** 🎵\n\n` +
                     `📝 **How to use:**\n` +
-                    `• Just type any song title to search\n` +
-                    `• Example: \`Blinding Lights\`\n` +
-                    `• Example: \`The Weeknd - Blinding Lights\`\n` +
-                    `• Example: \`Wonderwall Oasis\`\n\n` +
+                    `• **Type a song title**: \`Blinding Lights\`\n` +
+                    `• **Paste full lyrics & chords**: Copy/paste complete song content\n` +
+                    `• **Share a URL**: Link to lyrics websites\n` +
+                    `• **Specify artist**: \`The Weeknd - Blinding Lights\`\n\n` +
+                    `🔗 **New Features:**\n` +
+                    `• **URL Processing**: Paste links to chord/lyrics sites\n` +
+                    `• **Manual Input**: Paste complete lyrics with chords\n` +
+                    `• **Auto-Format**: Bot extracts title/artist automatically\n` +
+                    `• **Smart Detection**: Recognizes URLs vs lyrics vs song titles\n\n` +
                     `🌐 **Search Sources:**\n` +
-                    `• Local database (fastest)\n` +
-                    `• Web search (automatic)\n` +
-                    `• Popular songs cache\n\n` +
+                    `• Manual input (most reliable)\n` +
+                    `• URL content extraction\n` +
+                    `• Local database\n` +
+                    `• Web search\n\n` +
                     `📄 **PDF Features:**\n` +
                     `• 2-column layout\n` +
                     `• Bold song titles\n` +
@@ -130,7 +153,7 @@ client.on('messageCreate', async (message) => {
                     `• \`!list\` - Show available songs\n` +
                     `• \`!discover\` - Auto-discover popular songs\n\n` +
                     `⚠️ **Legal Notice:**\n` +
-                    `Web-sourced lyrics are for educational/personal use. Ensure proper rights for commercial distribution.`
+                    `User-provided content responsibility lies with the user. Ensure proper rights for distribution.`
         });
     }
     
@@ -152,7 +175,7 @@ client.on('messageCreate', async (message) => {
             }
             
             if (cachedSongs.length > 0) {
-                songList += `**� Web Cache:**\n`;
+                songList += `**🌐 Web Cache:**\n`;
                 songList += cachedSongs.slice(0, 10).map(song => `• **${song.title}** by ${song.artist}`).join('\n');
                 if (cachedSongs.length > 10) {
                     songList += `\n• ... and ${cachedSongs.length - 10} more`;
