@@ -283,11 +283,16 @@ class ManualInputProcessor {
             
             // Detect arkjuander.com specific section markers
             const sectionMarkers = ['intro:', 'verse1:', 'verse2:', 'verse3:', 'verse4:', 'verse5:', 
-                                  'pre chorus:', 'chorus:', 'bridge:', 'bridge1:', 'bridge2:', 'outro:'];
+                                  'pre chorus:', 'chorus:', 'bridge:', 'bridge1:', 'bridge2:', 'outro:',
+                                  'verse:', 'bridge:', 'intro', 'outro'];
             
-            const isSection = sectionMarkers.some(marker => lowerLine.includes(marker));
+            const isSection = sectionMarkers.some(marker => lowerLine.includes(marker)) ||
+                             /^(verse|chorus|bridge|intro|outro)(\s*\d*):\s*$/i.test(line.trim());
             
-            if (isSection) {
+            // Also look for section markers without colons
+            const isSectionAlt = /^(INTRO|VERSE\d*|PRE CHORUS|CHORUS|BRIDGE\d*|OUTRO)\s*$/i.test(line.trim());
+            
+            if (isSection || isSectionAlt) {
                 console.log('🎵 Found section:', line);
                 inSongContent = true;
                 skipUntilNextSection = false;
@@ -340,21 +345,45 @@ class ManualInputProcessor {
                 lowerLine.includes('check out our') ||
                 lowerLine.includes('set list builder') ||
                 lowerLine.includes('quick menu') ||
+                lowerLine.includes('doctype') ||
+                lowerLine.includes('<html') ||
+                lowerLine.includes('<head') ||
+                lowerLine.includes('<style') ||
+                lowerLine.includes('<script') ||
+                lowerLine.includes('charset') ||
                 line.length < 2) {
+                continue;
+            }
+            
+            // Special handling for arkjuander.com - look for content after specific triggers
+            if (!inSongContent && (lowerLine.includes('original key') || lowerLine.includes('font'))) {
+                console.log('🎵 Found potential song content trigger, enabling extraction...');
+                inSongContent = true;
                 continue;
             }
             
             // Check for chord patterns specific to arkjuander format
             const hasChords = /\b[A-G](?:#|b)?(?:maj|min|m|aug|dim|sus|add)?[0-9]?\b/.test(line) ||
                              /\/[A-G]/.test(line) || // Slash chords like /E
-                             /^[A-G#b\s\/]+$/.test(line.trim()); // Pure chord lines
+                             /^[A-G#b\s\/]+$/.test(line.trim()) || // Pure chord lines
+                             /\b[A-G]\s+[A-G]/.test(line); // Multiple chords
             
             // Check if it looks like lyrics (has vowels and meaningful length)
             const hasLyrics = line.length > 3 && 
                              !/^[A-G\s#b\/\-]+$/.test(line) &&
-                             /[aeiouAEIOU]/.test(line) &&
+                             /[aeiouAEIOU].*[aeiouAEIOU]/.test(line) && // At least 2 vowels
                              !lowerLine.includes('hillsong') &&
-                             !lowerLine.includes('worship');
+                             !lowerLine.includes('worship') &&
+                             !lowerLine.includes('arkjuander') &&
+                             !lowerLine.includes('chords') &&
+                             !/^\s*\d+\s*$/.test(line); // Not just numbers
+            
+            // Also accept lines that are clearly song sections or content
+            const isSongContent = lowerLine.includes('one thing') ||
+                                 lowerLine.includes('i desire') ||
+                                 lowerLine.includes('lord your name') ||
+                                 lowerLine.includes('jesus') ||
+                                 /^[A-Z\s]{8,}$/.test(line.trim()) && line.length < 100; // All caps lyrics
             
             // Clean the line
             let cleanLine = line
@@ -363,15 +392,15 @@ class ManualInputProcessor {
                 .trim();
             
             // Add valid content lines
-            if ((hasChords || hasLyrics) && cleanLine.length > 0) {
+            if ((hasChords || hasLyrics || isSongContent) && cleanLine.length > 0) {
                 // Format chord-only lines differently
-                if (hasChords && !hasLyrics) {
+                if (hasChords && !hasLyrics && !isSongContent) {
                     cleanLine = cleanLine.replace(/\s+/g, '  '); // Space out chords
                 }
                 
                 console.log('✅ Adding line:', cleanLine.substring(0, 50) + (cleanLine.length > 50 ? '...' : ''));
                 lyricsLines.push(cleanLine);
-                if (hasChords) foundChords = true;
+                if (hasChords || isSongContent) foundChords = true;
             }
         }
         
@@ -379,7 +408,7 @@ class ManualInputProcessor {
         console.log('📋 First 5 lines:', lyricsLines.slice(0, 5));
         
         // Return the array directly instead of joining and splitting
-        return foundChords && lyricsLines.length > 5 ? lyricsLines : null;
+        return foundChords && lyricsLines.length > 3 ? lyricsLines : null;
     }
 
     // Simple text extraction as fallback
