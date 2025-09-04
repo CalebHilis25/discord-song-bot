@@ -84,6 +84,7 @@ class ManualInputProcessor {
             
             if (content) {
                 console.log('📄 Content fetched, length:', content.length);
+                console.log('📄 Content preview:', content.substring(0, 200) + '...');
                 
                 // Try to extract song info from the content
                 const songInfo = this.extractSongInfoFromHTML(content, fullURL);
@@ -91,10 +92,11 @@ class ManualInputProcessor {
                 if (songInfo) {
                     if (message) await message.edit('✅ Successfully extracted lyrics from URL! Generating PDF...');
                     console.log('✅ Song extracted:', songInfo.title, 'by', songInfo.artist);
+                    console.log('📝 Lyrics lines count:', songInfo.lyrics?.length);
                     return songInfo;
                 } else {
                     console.log('❌ Could not extract song info from content');
-                    console.log('📄 Content preview:', content.substring(0, 500));
+                    console.log('📄 Content sample for debugging:', content.substring(500, 1000));
                 }
             } else {
                 console.log('❌ No content received from URL');
@@ -206,6 +208,8 @@ class ManualInputProcessor {
 
     // Extract chords and lyrics from HTML content
     extractChordsFromHTML(html) {
+        console.log('🔍 Starting HTML extraction...');
+        
         // Remove all HTML tags but preserve line breaks
         let text = html
             .replace(/<br\s*\/?>/gi, '\n')
@@ -219,8 +223,12 @@ class ManualInputProcessor {
             .replace(/\s+/g, ' ')
             .trim();
 
+        console.log('📄 Cleaned text length:', text.length);
+
         // Split into lines and clean up
         const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        console.log('📝 Total lines after split:', lines.length);
+        
         const lyricsLines = [];
         const seenSections = new Set();
         
@@ -239,6 +247,7 @@ class ManualInputProcessor {
             const isSection = sectionMarkers.some(marker => lowerLine.includes(marker));
             
             if (isSection) {
+                console.log('🎵 Found section:', line);
                 inSongContent = true;
                 skipUntilNextSection = false;
                 let sectionName = line.replace(/:/g, '').toUpperCase().trim();
@@ -253,6 +262,7 @@ class ManualInputProcessor {
                     lyricsLines.push(`[${sectionName}]`);
                     foundChords = true;
                 } else {
+                    console.log('⚠️ Skipping duplicate section:', sectionName);
                     skipUntilNextSection = true;
                 }
                 continue;
@@ -318,12 +328,14 @@ class ManualInputProcessor {
                     cleanLine = cleanLine.replace(/\s+/g, '  '); // Space out chords
                 }
                 
+                console.log('✅ Adding line:', cleanLine.substring(0, 50) + (cleanLine.length > 50 ? '...' : ''));
                 lyricsLines.push(cleanLine);
                 if (hasChords) foundChords = true;
             }
         }
         
-        console.log(`🎵 Extracted ${lyricsLines.length} lines from arkjuander.com, found chords: ${foundChords}`);
+        console.log(`🎵 Final result: ${lyricsLines.length} lines extracted, found chords: ${foundChords}`);
+        console.log('📋 First 5 lines:', lyricsLines.slice(0, 5));
         
         // Return the array directly instead of joining and splitting
         return foundChords && lyricsLines.length > 5 ? lyricsLines : null;
