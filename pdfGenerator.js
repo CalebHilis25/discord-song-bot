@@ -160,17 +160,26 @@ function estimateSectionHeight(section, doc, width) {
 
 // Distribute sections sequentially to maintain song order
 function distributeIntoColumns(sections, doc, columnWidth) {
-    const maxColumnHeight = doc.page.height - 200; // Leave room for header/footer
+    // Calculate available height from current Y position to bottom of page
+    const currentY = doc.y;
+    const bottomMargin = 80; // Leave room for footer
+    const availableHeight = doc.page.height - currentY - bottomMargin;
+    
     let currentHeight = 0;
     const leftSections = [];
     const rightSections = [];
     let useRightColumn = false;
     
+    console.log(`📄 Page distribution: currentY=${currentY}, availableHeight=${availableHeight}`);
+    
     for (const section of sections) {
         const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
         
+        console.log(`📝 Section height: ${sectionHeight}, currentHeight: ${currentHeight}, useRight: ${useRightColumn}`);
+        
         // If this section would overflow the current column, switch to right column
-        if (!useRightColumn && currentHeight + sectionHeight > maxColumnHeight) {
+        if (!useRightColumn && currentHeight + sectionHeight > availableHeight) {
+            console.log(`🔄 Switching to right column - section too tall for left`);
             useRightColumn = true;
             currentHeight = 0; // Reset height for right column
         }
@@ -185,16 +194,26 @@ function distributeIntoColumns(sections, doc, columnWidth) {
         currentHeight += sectionHeight;
     }
     
+    console.log(`📊 Distribution: ${leftSections.length} left sections, ${rightSections.length} right sections`);
     return { leftSections, rightSections };
 }
 
-// Render sections with proper formatting
+// Render sections with proper formatting and overflow protection
 function renderSections(doc, sections, columnX, columnWidth) {
     for (let i = 0; i < sections.length; i++) {
         const section = sections[i];
         
-        // Add space before section (except first one)
-        if (i > 0) {
+        // Check if we need a page break before this section
+        const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
+        const bottomMargin = 80;
+        
+        if (doc.y + sectionHeight > doc.page.height - bottomMargin) {
+            console.log(`⚠️ Section ${i} would overflow page, adding page break`);
+            doc.addPage();
+        }
+        
+        // Add space before section (except first one and after page break)
+        if (i > 0 && doc.y > 100) { // 100 = roughly header area
             doc.moveDown(1);
         }
         
@@ -224,7 +243,7 @@ function renderSections(doc, sections, columnX, columnWidth) {
     }
 }
 
-// Check if a line contains chords - Smart detection
+// Check if a line contains chords - Simplified and more accurate
 function isChordLine(line) {
     const trimmed = line.trim();
     
@@ -234,43 +253,29 @@ function isChordLine(line) {
     // Section headers are not chord lines
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) return false;
     
-    // Look for chord patterns
-    const chordPatterns = [
-        /\b[A-G][#b]?(m|maj|min|sus|aug|dim|add)?[0-9]?\b/g,  // Standard chords
-        /\b[A-G][#b]?\/[A-G][#b]?\b/g,                        // Slash chords like C/G
-        /\b[A-G][#b]?\s+[A-G][#b]?\b/g                        // Space-separated chords
-    ];
+    // Simple chord patterns - much more permissive
+    const basicChordPattern = /\b[A-G][#b]?(m|maj|min|sus|aug|dim|add|[0-9])*\b/g;
+    const chordMatches = trimmed.match(basicChordPattern);
     
-    let chordCount = 0;
-    for (const pattern of chordPatterns) {
-        const matches = trimmed.match(pattern);
-        if (matches) chordCount += matches.length;
-    }
+    if (!chordMatches) return false;
     
-    // Check for common lyric words that indicate it's NOT a chord line
-    const lyricWords = /\b(the|and|you|me|my|i|a|to|in|is|of|for|with|will|love|god|lord|jesus|heart|life|time|way|day|night|see|know|come|go|take|give|said|say|never|always|every|all|when|where|what|how|why|can|could|would|should|was|were|been|being|have|has|had|do|does|did|get|got|make|made|let|put|call|find|keep|feel|think|want|need|help|tell|ask|try|turn|look|show|work|play|move|live|die|born|sing|dance|walk|run|fly|fall|rise|stand|sit|lay|sleep|wake|dream|hope|pray|praise|worship|holy|spirit|heaven|earth|water|fire|light|dark|sun|moon|star|sky|mountain|valley|river|ocean|tree|flower|bird|wind|rain|snow|peace|joy|grace|mercy|faith|truth|power|glory|name|word|voice|hand|eye|face|soul)\b/i;
+    // Count words in the line
+    const words = trimmed.split(/\s+/).filter(word => word.length > 0);
+    const chordCount = chordMatches.length;
     
-    // Strong indicators this is a chord line:
-    // 1. Has multiple chord patterns
-    // 2. Relatively short line
-    // 3. Doesn't contain many lyric words
-    // 4. Has chord-like spacing patterns
+    // Very simple rules:
+    // 1. If more than half the words are chords, it's a chord line
+    // 2. If it's a short line (≤ 20 chars) with any chords, it's probably chords
+    // 3. If it has 2+ chords and no common lyrics words, it's chords
     
-    const hasMultipleChords = chordCount >= 2;
-    const isShortLine = trimmed.length <= 60;
-    const hasLyricWords = lyricWords.test(trimmed);
-    const hasChordSpacing = /^[A-G][#b]?(\w{0,3})\s+[A-G][#b]?(\w{0,3})/.test(trimmed);
+    const chordRatio = chordCount / words.length;
+    const isShort = trimmed.length <= 20;
+    const hasCommonLyrics = /\b(the|and|you|me|my|i|a|to|in|is|of|for|with|will|love|lord|jesus|your|than|all|name)\b/i.test(trimmed);
     
     // Chord line if:
-    // - Has multiple chords AND is short AND doesn't have lyric words
-    // - OR has chord spacing pattern
-    // - OR line is mostly chord symbols (high chord density)
-    
-    const chordDensity = chordCount / trimmed.split(' ').length;
-    
-    return (hasMultipleChords && isShortLine && !hasLyricWords) ||
-           hasChordSpacing ||
-           chordDensity > 0.6;
+    return (chordRatio >= 0.5) ||                    // More than half words are chords
+           (isShort && chordCount >= 1) ||          // Short line with any chords
+           (chordCount >= 2 && !hasCommonLyrics);   // Multiple chords, no lyrics words
 }
 
 module.exports = {
