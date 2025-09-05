@@ -62,74 +62,25 @@ async function generatePDF(song) {
             doc.fontSize(11)
                .font('Helvetica');
             
-            // Split lyrics into two columns
-            const lyrics = song.lyrics || [];
-            const midPoint = Math.ceil(lyrics.length / 2);
-            const leftColumn = lyrics.slice(0, midPoint);
-            const rightColumn = lyrics.slice(midPoint);
+            // Process lyrics into sections for intelligent column splitting
+            const sections = groupLyricsIntoSections(song.lyrics || []);
+            
+            // Intelligent column distribution
+            const { leftSections, rightSections } = distributeIntoColumns(sections, doc, columnWidth);
             
             // Current Y position for both columns
             let currentY = doc.y;
             const startY = currentY;
             
-            // Left Column
+            // Render Left Column
             doc.x = leftColumnX;
             doc.y = currentY;
+            renderSections(doc, leftSections, leftColumnX, columnWidth);
             
-            leftColumn.forEach(line => {
-                // Check if line contains chords (has capital letters followed by spaces)
-                const isChordLine = /^[A-G].*/.test(line.trim()) && !line.includes('[');
-                
-                if (line.trim().startsWith('[') && line.trim().endsWith(']')) {
-                    // Section headers (Verse, Chorus, etc.) - bold
-                    doc.font('Helvetica-Bold')
-                       .text(line, leftColumnX, doc.y, { width: columnWidth });
-                    doc.font('Helvetica');
-                } else if (isChordLine) {
-                    // Chord lines - bold
-                    doc.font('Helvetica-Bold')
-                       .text(line, leftColumnX, doc.y, { width: columnWidth });
-                    doc.font('Helvetica');
-                } else {
-                    // Regular lyrics
-                    doc.text(line, leftColumnX, doc.y, { width: columnWidth });
-                }
-                
-                // Add extra space after empty lines (song sections)
-                if (line.trim() === '') {
-                    doc.moveDown(0.5);
-                }
-            });
-            
-            // Right Column
-            const rightColumnStartY = startY;
+            // Render Right Column
             doc.x = rightColumnX;
-            doc.y = rightColumnStartY;
-            
-            rightColumn.forEach(line => {
-                // Check if line contains chords
-                const isChordLine = /^[A-G].*/.test(line.trim()) && !line.includes('[');
-                
-                if (line.trim().startsWith('[') && line.trim().endsWith(']')) {
-                    // Section headers - bold
-                    doc.font('Helvetica-Bold')
-                       .text(line, rightColumnX, doc.y, { width: columnWidth });
-                    doc.font('Helvetica');
-                } else if (isChordLine) {
-                    // Chord lines - bold
-                    doc.font('Helvetica-Bold')
-                       .text(line, rightColumnX, doc.y, { width: columnWidth });
-                    doc.font('Helvetica');
-                } else {
-                    // Regular lyrics
-                    doc.text(line, rightColumnX, doc.y, { width: columnWidth });
-                }
-                
-                // Add extra space after empty lines
-                if (line.trim() === '') {
-                    doc.moveDown(0.5);
-                }
-            });
+            doc.y = startY;
+            renderSections(doc, rightSections, rightColumnX, columnWidth);
             
             // Footer
             doc.fontSize(8)
@@ -161,6 +112,135 @@ async function generatePDF(song) {
     });
 }
 
+// Group lyrics into logical sections
+function groupLyricsIntoSections(lyrics) {
+    const sections = [];
+    let currentSection = [];
+    
+    for (const line of lyrics) {
+        const trimmedLine = line.trim();
+        
+        // If we hit a section header and have content, save current section
+        if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']') && currentSection.length > 0) {
+            sections.push([...currentSection]);
+            currentSection = [line];
+        } else {
+            currentSection.push(line);
+        }
+    }
+    
+    // Add the last section
+    if (currentSection.length > 0) {
+        sections.push(currentSection);
+    }
+    
+    return sections;
+}
+
+// Estimate section height for column distribution
+function estimateSectionHeight(section, doc, width) {
+    let height = 0;
+    const lineHeight = doc.currentLineHeight();
+    
+    for (const line of section) {
+        const trimmedLine = line.trim();
+        
+        if (trimmedLine === '') {
+            height += lineHeight * 0.5; // Empty line spacing
+        } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+            height += lineHeight * 1.5; // Section header with extra space
+        } else {
+            height += lineHeight;
+        }
+    }
+    
+    height += lineHeight; // Extra space after section
+    return height;
+}
+
+// Intelligently distribute sections into columns
+function distributeIntoColumns(sections, doc, columnWidth) {
+    const maxColumnHeight = doc.page.height - 150; // Leave room for header/footer
+    let leftHeight = 0;
+    let rightHeight = 0;
+    const leftSections = [];
+    const rightSections = [];
+    
+    for (const section of sections) {
+        const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
+        
+        // If adding to left column would exceed 50% and not break a section badly
+        if (leftHeight + sectionHeight > maxColumnHeight * 0.6 && rightHeight === 0) {
+            // Start right column
+            rightSections.push(section);
+            rightHeight += sectionHeight;
+        } else if (leftHeight <= rightHeight) {
+            // Add to left column
+            leftSections.push(section);
+            leftHeight += sectionHeight;
+        } else {
+            // Add to right column
+            rightSections.push(section);
+            rightHeight += sectionHeight;
+        }
+    }
+    
+    return { leftSections, rightSections };
+}
+
+// Render sections with proper formatting
+function renderSections(doc, sections, columnX, columnWidth) {
+    for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        
+        // Add space before section (except first one)
+        if (i > 0) {
+            doc.moveDown(1);
+        }
+        
+        for (const line of section) {
+            const trimmedLine = line.trim();
+            
+            if (trimmedLine === '') {
+                // Empty line - small space
+                doc.moveDown(0.3);
+            } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+                // Section headers - bold
+                doc.font('Helvetica-Bold')
+                   .text(line, columnX, doc.y, { width: columnWidth });
+                doc.font('Helvetica');
+                doc.moveDown(0.2);
+            } else if (isChordLine(trimmedLine)) {
+                // Chord lines - regular weight (not bold as requested)
+                doc.font('Helvetica')
+                   .text(line, columnX, doc.y, { width: columnWidth });
+            } else {
+                // Lyrics - bold as requested
+                doc.font('Helvetica-Bold')
+                   .text(line, columnX, doc.y, { width: columnWidth });
+                doc.font('Helvetica');
+            }
+        }
+    }
+}
+
+// Check if a line contains chords
+function isChordLine(line) {
+    // Look for chord patterns: single letters, with optional modifiers
+    const chordPattern = /^[A-G]([#b]?)(\w*)\s*([A-G]([#b]?)(\w*)\s*)*$/;
+    const hasChordIndicators = /\b[A-G][#b]?(m|maj|min|sus|aug|dim|add|[0-9])*\b/.test(line);
+    
+    // Must be short-ish line with chord patterns and not contain common lyric words
+    return line.length < 50 && 
+           hasChordIndicators && 
+           !/\b(the|and|you|me|my|i|a|to|in|is|of|for|with)\b/i.test(line);
+}
+
 module.exports = {
-    generatePDF
+    generatePDF,
+    groupLyricsIntoSections,
+    estimateSectionHeight,
+    distributeIntoColumns,
+    renderSections,
+    isChordLine
 };
