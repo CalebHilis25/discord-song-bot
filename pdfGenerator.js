@@ -158,7 +158,7 @@ function estimateSectionHeight(section, doc, width) {
     return height;
 }
 
-// Distribute sections with smart 50/50 balancing - NEVER SPLIT SECTIONS BETWEEN COLUMNS
+// Distribute sections with smart 50/50 balancing to avoid unnecessary page breaks
 function distributeIntoColumns(sections, doc, columnWidth) {
     // Calculate available height from current Y position to bottom of page
     const currentY = doc.y;
@@ -171,19 +171,18 @@ function distributeIntoColumns(sections, doc, columnWidth) {
     }, 0);
     
     console.log(`📄 Page distribution: currentY=${currentY}, availableHeight=${availableHeight}, totalHeight=${totalHeight}`);
-    console.log(`🎵 SECTION INTEGRITY: Each song section (Verse, Chorus, etc.) will be kept intact - never split between columns`);
     
     // If all sections can fit in available height, try 50/50 distribution
     if (totalHeight <= availableHeight) {
-        console.log(`✅ All sections fit on page - attempting 50/50 distribution (keeping sections intact)`);
+        console.log(`✅ All sections fit on page - attempting 50/50 distribution`);
         return distributeEvenly(sections, doc, columnWidth, availableHeight);
     } else {
-        console.log(`⚠️ Sections exceed page height - using overflow protection (keeping sections intact)`);
+        console.log(`⚠️ Sections exceed page height - using overflow protection`);
         return distributeWithOverflow(sections, doc, columnWidth, availableHeight);
     }
 }
 
-// Try to distribute sections evenly between columns (50/50 approach) - KEEP SECTIONS INTACT
+// Try to distribute sections evenly between columns (50/50 approach) with smart splitting
 function distributeEvenly(sections, doc, columnWidth, availableHeight) {
     const targetHeight = availableHeight / 2; // Aim for 50% per column
     let leftHeight = 0;
@@ -193,48 +192,111 @@ function distributeEvenly(sections, doc, columnWidth, availableHeight) {
     
     for (const section of sections) {
         const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
+        const remainingLeftSpace = availableHeight - leftHeight;
+        const remainingRightSpace = availableHeight - rightHeight;
         
-        // CRITICAL: Never split a section - it must fit entirely in one column
-        const leftCanFit = (leftHeight + sectionHeight) <= availableHeight;
-        const rightCanFit = (rightHeight + sectionHeight) <= availableHeight;
-        
-        // Choose column based on:
-        // 1. Which column can actually fit the ENTIRE section
-        // 2. Which column is currently shorter (for balance)
-        let useLeft;
-        
-        if (leftCanFit && rightCanFit) {
-            // Both can fit - choose the shorter column for balance
-            useLeft = leftHeight <= rightHeight;
-        } else if (leftCanFit && !rightCanFit) {
-            // Only left can fit the entire section
-            useLeft = true;
-        } else if (!leftCanFit && rightCanFit) {
-            // Only right can fit the entire section
-            useLeft = false;
-        } else {
-            // Neither column can fit - this will need overflow handling
-            // Default to left column and let overflow protection handle it
-            useLeft = true;
-            console.log(`⚠️ Section too large for both columns (height: ${sectionHeight})`);
-        }
-        
-        if (useLeft) {
+        // Check if section fits entirely in left column
+        if (leftHeight + sectionHeight <= availableHeight) {
             leftSections.push(section);
             leftHeight += sectionHeight;
-            console.log(`📝 ENTIRE Section to LEFT: height=${sectionHeight}, leftTotal=${leftHeight}`);
-        } else {
+            console.log(`📝 Whole section to LEFT: height=${sectionHeight}, leftTotal=${leftHeight}`);
+        }
+        // Check if section fits entirely in right column
+        else if (rightHeight + sectionHeight <= availableHeight) {
             rightSections.push(section);
             rightHeight += sectionHeight;
-            console.log(`📝 ENTIRE Section to RIGHT: height=${sectionHeight}, rightTotal=${rightHeight}`);
+            console.log(`📝 Whole section to RIGHT: height=${sectionHeight}, rightTotal=${rightHeight}`);
+        }
+        // Section doesn't fit entirely - try smart splitting
+        else {
+            const splitResult = trySplitSection(section, doc, columnWidth, remainingLeftSpace, remainingRightSpace);
+            
+            if (splitResult.canSplit) {
+                // Add split parts to respective columns
+                if (splitResult.leftPart.length > 0) {
+                    leftSections.push(splitResult.leftPart);
+                    leftHeight += splitResult.leftHeight;
+                    console.log(`✂️ Section split - LEFT part: ${splitResult.leftPart.length} lines, height=${splitResult.leftHeight}`);
+                }
+                if (splitResult.rightPart.length > 0) {
+                    rightSections.push(splitResult.rightPart);
+                    rightHeight += splitResult.rightHeight;
+                    console.log(`✂️ Section split - RIGHT part: ${splitResult.rightPart.length} lines, height=${splitResult.rightHeight}`);
+                }
+            } else {
+                // Can't split intelligently - put whole section where it fits better
+                if (remainingLeftSpace >= remainingRightSpace && remainingLeftSpace > sectionHeight * 0.5) {
+                    leftSections.push(section);
+                    leftHeight += sectionHeight;
+                    console.log(`📝 Forced section to LEFT: height=${sectionHeight}`);
+                } else {
+                    rightSections.push(section);
+                    rightHeight += sectionHeight;
+                    console.log(`📝 Forced section to RIGHT: height=${sectionHeight}`);
+                }
+            }
         }
     }
     
-    console.log(`📊 Balanced distribution (sections kept intact): ${leftSections.length} left (${leftHeight}), ${rightSections.length} right (${rightHeight})`);
+    console.log(`📊 Smart distribution: ${leftSections.length} left (${leftHeight}), ${rightSections.length} right (${rightHeight})`);
     return { leftSections, rightSections };
 }
 
-// Fallback: sequential distribution with overflow protection - KEEP SECTIONS INTACT
+// Smart section splitting - ensures at least 30% content in first column
+function trySplitSection(section, doc, columnWidth, leftSpace, rightSpace) {
+    const minLeftPercentage = 0.30; // At least 30% must stay in left column
+    const sectionLines = section.length;
+    const minLeftLines = Math.ceil(sectionLines * minLeftPercentage);
+    
+    // Calculate height for minimum left portion (30%)
+    const minLeftPortion = section.slice(0, minLeftLines);
+    const minLeftHeight = estimateSectionHeight(minLeftPortion, doc, columnWidth);
+    
+    // If even 30% doesn't fit in left space, don't split
+    if (minLeftHeight > leftSpace) {
+        console.log(`� Can't split - even 30% (${minLeftLines} lines) too big for left space`);
+        return { canSplit: false };
+    }
+    
+    // Find optimal split point - as much as possible in left while staying within space
+    let bestSplitIndex = minLeftLines; // Start with minimum 30%
+    
+    for (let i = minLeftLines + 1; i <= sectionLines; i++) {
+        const leftPortion = section.slice(0, i);
+        const leftHeight = estimateSectionHeight(leftPortion, doc, columnWidth);
+        
+        if (leftHeight <= leftSpace) {
+            bestSplitIndex = i; // This split point works
+        } else {
+            break; // Stop - this would exceed left space
+        }
+    }
+    
+    // Create the split
+    const leftPart = section.slice(0, bestSplitIndex);
+    const rightPart = section.slice(bestSplitIndex);
+    
+    const leftHeight = estimateSectionHeight(leftPart, doc, columnWidth);
+    const rightHeight = estimateSectionHeight(rightPart, doc, columnWidth);
+    
+    // Verify right part fits in right column
+    if (rightHeight > rightSpace) {
+        console.log(`🚫 Can't split - right part too big for right space`);
+        return { canSplit: false };
+    }
+    
+    console.log(`✅ Smart split: ${leftPart.length}/${rightPart.length} lines (${(leftPart.length/sectionLines*100).toFixed(1)}%/${(rightPart.length/sectionLines*100).toFixed(1)}%)`);
+    
+    return {
+        canSplit: true,
+        leftPart,
+        rightPart,
+        leftHeight,
+        rightHeight
+    };
+}
+
+// Fallback: sequential distribution with overflow protection
 function distributeWithOverflow(sections, doc, columnWidth, availableHeight) {
     let currentHeight = 0;
     const leftSections = [];
@@ -244,26 +306,24 @@ function distributeWithOverflow(sections, doc, columnWidth, availableHeight) {
     for (const section of sections) {
         const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
         
-        // CRITICAL: Check if ENTIRE section would overflow the current column
-        if (!useRightColumn && (currentHeight + sectionHeight) > availableHeight) {
-            console.log(`🔄 Switching to right column - ENTIRE section too tall for left (section height: ${sectionHeight})`);
+        // If this section would overflow the current column, switch to right column
+        if (!useRightColumn && currentHeight + sectionHeight > availableHeight) {
+            console.log(`🔄 Switching to right column - section too tall for left`);
             useRightColumn = true;
             currentHeight = 0; // Reset height for right column
         }
         
-        // Add ENTIRE section to appropriate column - never split sections
+        // Add section to appropriate column in original order
         if (useRightColumn) {
             rightSections.push(section);
-            console.log(`📝 ENTIRE Section to RIGHT: height=${sectionHeight}, rightTotal=${currentHeight + sectionHeight}`);
         } else {
             leftSections.push(section);
-            console.log(`📝 ENTIRE Section to LEFT: height=${sectionHeight}, leftTotal=${currentHeight + sectionHeight}`);
         }
         
         currentHeight += sectionHeight;
     }
     
-    console.log(`📊 Sequential distribution (sections kept intact): ${leftSections.length} left sections, ${rightSections.length} right sections`);
+    console.log(`📊 Sequential distribution: ${leftSections.length} left sections, ${rightSections.length} right sections`);
     return { leftSections, rightSections };
 }
 
