@@ -158,7 +158,7 @@ function estimateSectionHeight(section, doc, width) {
     return height;
 }
 
-// Distribute sections with smart 50/50 balancing to avoid unnecessary page breaks
+// Distribute sections with smart splitting always enabled
 function distributeIntoColumns(sections, doc, columnWidth) {
     // Calculate available height from current Y position to bottom of page
     const currentY = doc.y;
@@ -172,19 +172,13 @@ function distributeIntoColumns(sections, doc, columnWidth) {
     
     console.log(`📄 Page distribution: currentY=${currentY}, availableHeight=${availableHeight}, totalHeight=${totalHeight}`);
     
-    // If all sections can fit in available height, try 50/50 distribution
-    if (totalHeight <= availableHeight) {
-        console.log(`✅ All sections fit on page - attempting 50/50 distribution`);
-        return distributeEvenly(sections, doc, columnWidth, availableHeight);
-    } else {
-        console.log(`⚠️ Sections exceed page height - using overflow protection`);
-        return distributeWithOverflow(sections, doc, columnWidth, availableHeight);
-    }
+    // Always use smart distribution with splitting capability
+    console.log(`🧠 Using smart distribution with section splitting enabled`);
+    return distributeWithSmartSplitting(sections, doc, columnWidth, availableHeight);
 }
 
-// Try to distribute sections evenly between columns (50/50 approach) with smart splitting
-function distributeEvenly(sections, doc, columnWidth, availableHeight) {
-    const targetHeight = availableHeight / 2; // Aim for 50% per column
+// Unified smart distribution with intelligent section splitting
+function distributeWithSmartSplitting(sections, doc, columnWidth, availableHeight) {
     let leftHeight = 0;
     let rightHeight = 0;
     const leftSections = [];
@@ -195,20 +189,23 @@ function distributeEvenly(sections, doc, columnWidth, availableHeight) {
         const remainingLeftSpace = availableHeight - leftHeight;
         const remainingRightSpace = availableHeight - rightHeight;
         
-        // Check if section fits entirely in left column
-        if (leftHeight + sectionHeight <= availableHeight) {
+        console.log(`📐 Processing section: height=${sectionHeight}, leftSpace=${remainingLeftSpace}, rightSpace=${remainingRightSpace}`);
+        
+        // Try to fit in left column first
+        if (sectionHeight <= remainingLeftSpace) {
             leftSections.push(section);
             leftHeight += sectionHeight;
             console.log(`📝 Whole section to LEFT: height=${sectionHeight}, leftTotal=${leftHeight}`);
         }
-        // Check if section fits entirely in right column
-        else if (rightHeight + sectionHeight <= availableHeight) {
+        // Try to fit in right column
+        else if (sectionHeight <= remainingRightSpace) {
             rightSections.push(section);
             rightHeight += sectionHeight;
             console.log(`📝 Whole section to RIGHT: height=${sectionHeight}, rightTotal=${rightHeight}`);
         }
-        // Section doesn't fit entirely - try smart splitting
+        // Section doesn't fit entirely anywhere - try smart splitting
         else {
+            console.log(`🔄 Section too big for either column - attempting smart split`);
             const splitResult = trySplitSection(section, doc, columnWidth, remainingLeftSpace, remainingRightSpace);
             
             if (splitResult.canSplit) {
@@ -224,21 +221,16 @@ function distributeEvenly(sections, doc, columnWidth, availableHeight) {
                     console.log(`✂️ Section split - RIGHT part: ${splitResult.rightPart.length} lines, height=${splitResult.rightHeight}`);
                 }
             } else {
-                // Can't split intelligently - put whole section where it fits better
-                if (remainingLeftSpace >= remainingRightSpace && remainingLeftSpace > sectionHeight * 0.5) {
-                    leftSections.push(section);
-                    leftHeight += sectionHeight;
-                    console.log(`📝 Forced section to LEFT: height=${sectionHeight}`);
-                } else {
-                    rightSections.push(section);
-                    rightHeight += sectionHeight;
-                    console.log(`📝 Forced section to RIGHT: height=${sectionHeight}`);
-                }
+                // Can't split - this will trigger a page break in rendering
+                console.log(`⚠️ Cannot split section intelligently - will need page break`);
+                // Put in right column as it's likely to have more space after left column content
+                rightSections.push(section);
+                rightHeight += sectionHeight;
             }
         }
     }
     
-    console.log(`📊 Smart distribution: ${leftSections.length} left (${leftHeight}), ${rightSections.length} right (${rightHeight})`);
+    console.log(`📊 Final distribution: ${leftSections.length} left (${leftHeight}), ${rightSections.length} right (${rightHeight})`);
     return { leftSections, rightSections };
 }
 
