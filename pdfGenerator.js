@@ -19,9 +19,9 @@ async function generatePDF(song) {
             const fileName = `${song.title.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
             const filePath = path.join(outputDir, fileName);
             
-            // Create PDF document
+            // Create PDF document - 8.5 x 11 inches (US Letter)
             const doc = new PDFDocument({
-                size: 'A4',
+                size: [612, 792], // 8.5" x 11" in points (72 points per inch)
                 margins: {
                     top: 50,
                     bottom: 50,
