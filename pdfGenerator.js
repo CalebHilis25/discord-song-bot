@@ -23,21 +23,21 @@ async function generatePDF(song) {
             const doc = new PDFDocument({
                 size: [612, 792], // 8.5" x 11" in points (72 points per inch)
                 margins: {
-                    top: 50,
-                    bottom: 50,
-                    left: 40,
-                    right: 40
+                    top: 40,    // Reduced from 50 to maximize space
+                    bottom: 40, // Reduced from 50 to maximize space
+                    left: 30,   // Reduced from 40 to maximize space
+                    right: 30   // Reduced from 40 to maximize space
                 }
             });
             
             // Pipe to file
             doc.pipe(fs.createWriteStream(filePath));
             
-            // Page dimensions
+            // Page dimensions - maximized space usage
             const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-            const columnWidth = (pageWidth - 20) / 2; // 20px gap between columns
+            const columnWidth = (pageWidth - 15) / 2; // Reduced gap from 20 to 15px
             const leftColumnX = doc.page.margins.left;
-            const rightColumnX = leftColumnX + columnWidth + 20;
+            const rightColumnX = leftColumnX + columnWidth + 15;
             
             // Title - Bold and centered
             doc.fontSize(16)
@@ -56,17 +56,14 @@ async function generatePDF(song) {
                });
             
             // Add some space
-            doc.moveDown(2);
+            doc.moveDown(1.5); // Reduced from 2 to save space
             
             // Set font for lyrics - 11pt as requested
             doc.fontSize(11)
                .font('Helvetica');
             
-            // Process lyrics into sections for intelligent column splitting
-            const sections = groupLyricsIntoSections(song.lyrics || []);
-            
-            // Intelligent column distribution
-            const { leftSections, rightSections } = distributeIntoColumns(sections, doc, columnWidth);
+            // Sequential column distribution (maintains order)
+            const { leftSections, rightSections } = distributeSequentially(song.lyrics || [], doc, columnWidth);
             
             // Current Y position for both columns
             let currentY = doc.y;
@@ -75,12 +72,12 @@ async function generatePDF(song) {
             // Render Left Column
             doc.x = leftColumnX;
             doc.y = currentY;
-            renderSections(doc, leftSections, leftColumnX, columnWidth);
+            renderLyricsSequentially(doc, leftSections, leftColumnX, columnWidth);
             
             // Render Right Column
             doc.x = rightColumnX;
             doc.y = startY;
-            renderSections(doc, rightSections, rightColumnX, columnWidth);
+            renderLyricsSequentially(doc, rightSections, rightColumnX, columnWidth);
             
             // Footer
             doc.fontSize(8)
@@ -112,111 +109,68 @@ async function generatePDF(song) {
     });
 }
 
-// Group lyrics into logical sections
-function groupLyricsIntoSections(lyrics) {
-    const sections = [];
-    let currentSection = [];
+// Sequential column distribution - maintains original order and maximizes space
+function distributeSequentially(lyrics, doc, columnWidth) {
+    const maxColumnHeight = doc.page.height - 120; // Maximized available height
+    const lineHeight = doc.currentLineHeight();
+    
+    let currentHeight = 0;
+    let leftColumn = [];
+    let rightColumn = [];
+    let useLeftColumn = true;
     
     for (const line of lyrics) {
         const trimmedLine = line.trim();
         
-        // If we hit a section header and have content, save current section
-        if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']') && currentSection.length > 0) {
-            sections.push([...currentSection]);
-            currentSection = [line];
-        } else {
-            currentSection.push(line);
-        }
-    }
-    
-    // Add the last section
-    if (currentSection.length > 0) {
-        sections.push(currentSection);
-    }
-    
-    return sections;
-}
-
-// Estimate section height for column distribution
-function estimateSectionHeight(section, doc, width) {
-    let height = 0;
-    const lineHeight = doc.currentLineHeight();
-    
-    for (const line of section) {
-        const trimmedLine = line.trim();
-        
+        // Estimate line height
+        let estimatedLineHeight = lineHeight;
         if (trimmedLine === '') {
-            height += lineHeight * 0.5; // Empty line spacing
+            estimatedLineHeight = lineHeight * 0.3; // Empty line
         } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-            height += lineHeight * 1.5; // Section header with extra space
+            estimatedLineHeight = lineHeight * 1.3; // Section header
+        }
+        
+        // Check if we need to switch to right column
+        if (useLeftColumn && currentHeight + estimatedLineHeight > maxColumnHeight * 0.85) {
+            useLeftColumn = false;
+            currentHeight = 0;
+        }
+        
+        // Add line to appropriate column
+        if (useLeftColumn) {
+            leftColumn.push(line);
+            currentHeight += estimatedLineHeight;
         } else {
-            height += lineHeight;
+            rightColumn.push(line);
+            currentHeight += estimatedLineHeight;
         }
     }
     
-    height += lineHeight; // Extra space after section
-    return height;
+    return { leftSections: [leftColumn], rightSections: [rightColumn] };
 }
 
-// Intelligently distribute sections into columns
-function distributeIntoColumns(sections, doc, columnWidth) {
-    const maxColumnHeight = doc.page.height - 150; // Leave room for header/footer
-    let leftHeight = 0;
-    let rightHeight = 0;
-    const leftSections = [];
-    const rightSections = [];
-    
+// Render lyrics sequentially with proper formatting
+function renderLyricsSequentially(doc, sections, columnX, columnWidth) {
     for (const section of sections) {
-        const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
-        
-        // If adding to left column would exceed 50% and not break a section badly
-        if (leftHeight + sectionHeight > maxColumnHeight * 0.6 && rightHeight === 0) {
-            // Start right column
-            rightSections.push(section);
-            rightHeight += sectionHeight;
-        } else if (leftHeight <= rightHeight) {
-            // Add to left column
-            leftSections.push(section);
-            leftHeight += sectionHeight;
-        } else {
-            // Add to right column
-            rightSections.push(section);
-            rightHeight += sectionHeight;
-        }
-    }
-    
-    return { leftSections, rightSections };
-}
-
-// Render sections with proper formatting
-function renderSections(doc, sections, columnX, columnWidth) {
-    for (let i = 0; i < sections.length; i++) {
-        const section = sections[i];
-        
-        // Add space before section (except first one)
-        if (i > 0) {
-            doc.moveDown(1);
-        }
-        
         for (const line of section) {
             const trimmedLine = line.trim();
             
             if (trimmedLine === '') {
-                // Empty line - small space
-                doc.moveDown(0.3);
+                // Empty line - minimal space
+                doc.moveDown(0.2);
             } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-                // Section headers - BOLD (as requested)
+                // Section headers - BOLD with small spacing
                 doc.font('Helvetica-Bold')
                    .text(line, columnX, doc.y, { width: columnWidth });
                 doc.font('Helvetica');
-                doc.moveDown(0.2);
+                doc.moveDown(0.1);
             } else if (isChordLine(trimmedLine)) {
-                // Chord lines - BOLD (as requested)
+                // Chord lines - BOLD
                 doc.font('Helvetica-Bold')
                    .text(line, columnX, doc.y, { width: columnWidth });
                 doc.font('Helvetica');
             } else {
-                // Lyrics - NORMAL font (as requested)
+                // Lyrics - NORMAL font
                 doc.font('Helvetica')
                    .text(line, columnX, doc.y, { width: columnWidth });
             }
@@ -275,9 +229,7 @@ function isChordLine(line) {
 
 module.exports = {
     generatePDF,
-    groupLyricsIntoSections,
-    estimateSectionHeight,
-    distributeIntoColumns,
-    renderSections,
+    distributeSequentially,
+    renderLyricsSequentially,
     isChordLine
 };
