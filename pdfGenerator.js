@@ -205,35 +205,72 @@ function renderSections(doc, sections, columnX, columnWidth) {
                 // Empty line - small space
                 doc.moveDown(0.3);
             } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-                // Section headers - bold
+                // Section headers - BOLD (as requested)
                 doc.font('Helvetica-Bold')
                    .text(line, columnX, doc.y, { width: columnWidth });
                 doc.font('Helvetica');
                 doc.moveDown(0.2);
             } else if (isChordLine(trimmedLine)) {
-                // Chord lines - regular weight (not bold as requested)
-                doc.font('Helvetica')
-                   .text(line, columnX, doc.y, { width: columnWidth });
-            } else {
-                // Lyrics - bold as requested
+                // Chord lines - BOLD (as requested)
                 doc.font('Helvetica-Bold')
                    .text(line, columnX, doc.y, { width: columnWidth });
                 doc.font('Helvetica');
+            } else {
+                // Lyrics - NORMAL font (as requested)
+                doc.font('Helvetica')
+                   .text(line, columnX, doc.y, { width: columnWidth });
             }
         }
     }
 }
 
-// Check if a line contains chords
+// Check if a line contains chords - Smart detection
 function isChordLine(line) {
-    // Look for chord patterns: single letters, with optional modifiers
-    const chordPattern = /^[A-G]([#b]?)(\w*)\s*([A-G]([#b]?)(\w*)\s*)*$/;
-    const hasChordIndicators = /\b[A-G][#b]?(m|maj|min|sus|aug|dim|add|[0-9])*\b/.test(line);
+    const trimmed = line.trim();
     
-    // Must be short-ish line with chord patterns and not contain common lyric words
-    return line.length < 50 && 
-           hasChordIndicators && 
-           !/\b(the|and|you|me|my|i|a|to|in|is|of|for|with)\b/i.test(line);
+    // Empty lines are not chord lines
+    if (trimmed.length === 0) return false;
+    
+    // Section headers are not chord lines
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) return false;
+    
+    // Look for chord patterns
+    const chordPatterns = [
+        /\b[A-G][#b]?(m|maj|min|sus|aug|dim|add)?[0-9]?\b/g,  // Standard chords
+        /\b[A-G][#b]?\/[A-G][#b]?\b/g,                        // Slash chords like C/G
+        /\b[A-G][#b]?\s+[A-G][#b]?\b/g                        // Space-separated chords
+    ];
+    
+    let chordCount = 0;
+    for (const pattern of chordPatterns) {
+        const matches = trimmed.match(pattern);
+        if (matches) chordCount += matches.length;
+    }
+    
+    // Check for common lyric words that indicate it's NOT a chord line
+    const lyricWords = /\b(the|and|you|me|my|i|a|to|in|is|of|for|with|will|love|god|lord|jesus|heart|life|time|way|day|night|see|know|come|go|take|give|said|say|never|always|every|all|when|where|what|how|why|can|could|would|should|was|were|been|being|have|has|had|do|does|did|get|got|make|made|let|put|call|find|keep|feel|think|want|need|help|tell|ask|try|turn|look|show|work|play|move|live|die|born|sing|dance|walk|run|fly|fall|rise|stand|sit|lay|sleep|wake|dream|hope|pray|praise|worship|holy|spirit|heaven|earth|water|fire|light|dark|sun|moon|star|sky|mountain|valley|river|ocean|tree|flower|bird|wind|rain|snow|peace|joy|grace|mercy|faith|truth|power|glory|name|word|voice|hand|eye|face|soul)\b/i;
+    
+    // Strong indicators this is a chord line:
+    // 1. Has multiple chord patterns
+    // 2. Relatively short line
+    // 3. Doesn't contain many lyric words
+    // 4. Has chord-like spacing patterns
+    
+    const hasMultipleChords = chordCount >= 2;
+    const isShortLine = trimmed.length <= 60;
+    const hasLyricWords = lyricWords.test(trimmed);
+    const hasChordSpacing = /^[A-G][#b]?(\w{0,3})\s+[A-G][#b]?(\w{0,3})/.test(trimmed);
+    
+    // Chord line if:
+    // - Has multiple chords AND is short AND doesn't have lyric words
+    // - OR has chord spacing pattern
+    // - OR line is mostly chord symbols (high chord density)
+    
+    const chordDensity = chordCount / trimmed.split(' ').length;
+    
+    return (hasMultipleChords && isShortLine && !hasLyricWords) ||
+           hasChordSpacing ||
+           chordDensity > 0.6;
 }
 
 module.exports = {
