@@ -20,8 +20,9 @@ const manualProcessor = new ManualInputProcessor();
 // Bot ready event
 client.once('ready', async () => {
     console.log(`✅ Bot ONLINE: ${client.user.tag}`);
-    console.log(`🎵 SINGLE INSTANCE - MANUAL INPUT ONLY - v4.0.0`);
-    console.log(`🔗 URL + Lyrics Processing ONLY`);
+    console.log(`🎵 SINGLE INSTANCE - MANUAL LYRICS ONLY - v5.0.0`);
+    console.log(`� LYRICS PASTING ONLY`);
+    console.log(`❌ NO URL PROCESSING`);
     console.log(`❌ NO WEB SEARCH FUNCTIONALITY`);
     console.log(`🚫 LOCAL BOT STOPPED - RAILWAY ONLY`);
 });
@@ -35,50 +36,50 @@ client.on('messageCreate', async (message) => {
     // Help command
     if (input === '!help') {
         await message.reply({
-            content: `🎵 **Song Bot v4.0.0** - Manual Input Only 🎵\n\n` +
+            content: `🎵 **Song Bot v5.0.0** - Manual Lyrics Only 🎵\n\n` +
                     `✅ **WORKS WITH:**\n` +
-                    `🔗 URLs: \`https://tabs.ultimate-guitar.com/...\`\n` +
-                    `📝 Pasted Lyrics: Full song with chords\n\n` +
+                    ` Pasted Lyrics: Full song with chords\n\n` +
                     `❌ **DOES NOT WORK:**\n` +
+                    `• URLs (disabled for security)\n` +
                     `• Song titles (like "Wonderwall")\n` +
                     `• Artist searches\n` +
                     `• Any web searching\n\n` +
                     `📄 **Output:** 2-column PDF with chords\n\n` +
-                    `💡 **Just paste URL or complete lyrics!**`
+                    `💡 **Just paste complete lyrics with chords!**`
         });
         return;
     }
 
     // Version check command
     if (input === '!version') {
-        await message.reply(`🤖 Bot Version: 4.0.0\nMode: Manual Input Only\nTimestamp: ${new Date().toISOString()}`);
+        await message.reply(`🤖 Bot Version: 5.0.0\nMode: Manual Lyrics Only\nTimestamp: ${new Date().toISOString()}`);
         return;
     }
 
-    // Test URL processing command
+    // Test lyrics processing command
     if (input.startsWith('!test ')) {
         const testInput = input.replace('!test ', '');
         const testMsg = await message.reply('🧪 Testing...');
         
         try {
-            const isURL = manualProcessor.isURL(testInput);
             const isLyrics = manualProcessor.looksLikeLyrics(testInput);
             
             let result = `🧪 **Test Results:**\n` +
                         `Input: \`${testInput.substring(0, 50)}...\`\n` +
-                        `URL Detection: ${isURL ? '✅' : '❌'}\n` +
                         `Lyrics Detection: ${isLyrics ? '✅' : '❌'}\n\n`;
             
-            if (isURL) {
-                result += `🔗 **Attempting URL processing...**\n`;
-                await testMsg.edit(result + `Status: Processing URL...`);
+            if (isLyrics) {
+                result += `� **Attempting lyrics processing...**\n`;
+                await testMsg.edit(result + `Status: Processing lyrics...`);
                 
-                const song = await manualProcessor.processUserInput(testInput, testMsg);
+                const song = await manualProcessor.processLyricsText(testInput, testMsg);
                 if (song) {
-                    result += `✅ **SUCCESS!** Extracted: ${song.title} by ${song.artist}`;
+                    result += `✅ **SUCCESS!** Processed: ${song.title} by ${song.artist}`;
                 } else {
-                    result += `❌ **FAILED** to extract content from URL`;
+                    result += `❌ **FAILED** to process lyrics text`;
                 }
+            } else {
+                result += `❌ **Input doesn't look like lyrics.** Please paste complete song lyrics with chords.`;
             }
             
             await testMsg.edit(result);
@@ -88,14 +89,28 @@ client.on('messageCreate', async (message) => {
         return;
     }
 
-    // Main processing
+    // Main processing - LYRICS ONLY
     if (!input.startsWith('!') && input.length > 0) {
-        const statusMsg = await message.reply('🔄 Processing...');
+        const statusMsg = await message.reply('🔄 Processing lyrics...');
         
         try {
-            console.log(`📥 Processing input: ${input.substring(0, 100)}...`);
+            console.log(`📥 Processing lyrics input: ${input.substring(0, 100)}...`);
             
-            const song = await manualProcessor.processUserInput(input, statusMsg);
+            // Check if input looks like lyrics
+            if (!manualProcessor.looksLikeLyrics(input)) {
+                await statusMsg.edit(
+                    `❌ **This doesn't look like song lyrics!**\n\n` +
+                    `✅ **Please paste:**\n` +
+                    `• Complete song lyrics with chords\n` +
+                    `• Multiple lines of text\n` +
+                    `• Verse/Chorus structure\n\n` +
+                    `❌ **URLs are disabled for security reasons**\n` +
+                    `❌ **Song titles won't work - paste full lyrics!**`
+                );
+                return;
+            }
+            
+            const song = await manualProcessor.processLyricsText(input, statusMsg);
             
             if (song) {
                 await statusMsg.edit('📄 Generating PDF...');
@@ -120,12 +135,14 @@ client.on('messageCreate', async (message) => {
                 await statusMsg.edit(
                     `❌ **Can't process this input!**\n\n` +
                     `✅ **Try:**\n` +
-                    `• Paste a URL: \`https://tabs.ultimate-guitar.com/...\`\n` +
-                    `• Paste complete lyrics with chords\n\n` +
+                    `• Paste complete lyrics with chords\n` +
+                    `• Include verse/chorus structure\n` +
+                    `• Make sure it's actual song lyrics\n\n` +
                     `❌ **Won't work:**\n` +
+                    `• URLs (disabled)\n` +
                     `• Song titles like "Wonderwall"\n` +
                     `• Artist names\n` +
-                    `• Searching by name`
+                    `• Short text snippets`
                 );
             }
             
