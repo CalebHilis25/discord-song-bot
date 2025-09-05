@@ -62,25 +62,9 @@ async function generatePDF(song) {
             doc.fontSize(11)
                .font('Helvetica');
             
-            // Process lyrics into sections for intelligent column splitting
-            const sections = groupLyricsIntoSections(song.lyrics || []);
-            
-            // Intelligent column distribution
-            const { leftSections, rightSections } = distributeIntoColumns(sections, doc, columnWidth);
-            
-            // Current Y position for both columns
-            let currentY = doc.y;
-            const startY = currentY;
-            
-            // Render Left Column
-            doc.x = leftColumnX;
-            doc.y = currentY;
-            renderSections(doc, leftSections, leftColumnX, columnWidth);
-            
-            // Render Right Column
-            doc.x = rightColumnX;
-            doc.y = startY;
-            renderSections(doc, rightSections, rightColumnX, columnWidth);
+            // Flow text in columns like Microsoft Word
+            const allLines = song.lyrics || [];
+            renderInWordStyleColumns(doc, allLines, leftColumnX, rightColumnX, columnWidth);
             
             // Footer
             doc.fontSize(8)
@@ -135,6 +119,88 @@ function groupLyricsIntoSections(lyrics) {
     }
     
     return sections;
+}
+
+// Microsoft Word style column rendering - text flows from bottom of left to top of right
+function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnWidth) {
+    const startY = doc.y;
+    const bottomMargin = 80;
+    const maxY = doc.page.height - bottomMargin;
+    
+    let currentX = leftColumnX;  // Start in left column
+    let currentY = startY;
+    let isRightColumn = false;
+    
+    console.log(`📰 Word-style columns: startY=${startY}, maxY=${maxY}, columnWidth=${columnWidth}`);
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+        
+        // Calculate height needed for this line
+        let lineHeight;
+        if (trimmedLine === '') {
+            lineHeight = doc.currentLineHeight() * 0.5; // Empty line spacing
+        } else {
+            // Use text height measurement
+            lineHeight = doc.heightOfString(line, { width: columnWidth }) || doc.currentLineHeight();
+        }
+        
+        // Add small buffer for section headers
+        if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+            lineHeight += doc.currentLineHeight() * 0.2; // Extra space after headers
+        }
+        
+        // Check if line would exceed page in current column
+        if (currentY + lineHeight > maxY) {
+            if (!isRightColumn) {
+                // Move to right column
+                console.log(`🔄 Flowing to right column at line ${i}: "${trimmedLine.substring(0, 30)}..."`);
+                currentX = rightColumnX;
+                currentY = startY;
+                isRightColumn = true;
+            } else {
+                // Need new page
+                console.log(`📄 New page needed at line ${i}`);
+                doc.addPage();
+                currentX = leftColumnX;
+                currentY = doc.y;
+                isRightColumn = false;
+            }
+        }
+        
+        // Set position
+        doc.x = currentX;
+        doc.y = currentY;
+        
+        // Render the line with appropriate formatting
+        if (trimmedLine === '') {
+            // Empty line - just move down
+            currentY += lineHeight;
+        } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+            // Section headers - BOLD
+            doc.font('Helvetica-Bold')
+               .text(line, currentX, currentY, { width: columnWidth });
+            doc.font('Helvetica');
+            currentY += lineHeight;
+        } else if (isChordLine(trimmedLine)) {
+            // Chord lines - BOLD
+            doc.font('Helvetica-Bold')
+               .text(line, currentX, currentY, { width: columnWidth });
+            doc.font('Helvetica');
+            currentY += doc.currentLineHeight();
+        } else {
+            // Lyrics - NORMAL font
+            doc.font('Helvetica')
+               .text(line, currentX, currentY, { width: columnWidth });
+            currentY += doc.currentLineHeight();
+        }
+        
+        // Update doc.y to current position for next iteration
+        doc.y = currentY;
+    }
+    
+    console.log(`✅ Word-style rendering complete. Final position: column=${isRightColumn ? 'right' : 'left'}, y=${currentY}`);
 }
 
 // Estimate section height for column distribution
