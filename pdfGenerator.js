@@ -158,24 +158,73 @@ function estimateSectionHeight(section, doc, width) {
     return height;
 }
 
-// Distribute sections sequentially to maintain song order
+// Distribute sections with smart 50/50 balancing to avoid unnecessary page breaks
 function distributeIntoColumns(sections, doc, columnWidth) {
     // Calculate available height from current Y position to bottom of page
     const currentY = doc.y;
     const bottomMargin = 80; // Leave room for footer
     const availableHeight = doc.page.height - currentY - bottomMargin;
     
+    // Calculate total height of all sections
+    const totalHeight = sections.reduce((sum, section) => {
+        return sum + estimateSectionHeight(section, doc, columnWidth);
+    }, 0);
+    
+    console.log(`📄 Page distribution: currentY=${currentY}, availableHeight=${availableHeight}, totalHeight=${totalHeight}`);
+    
+    // If all sections can fit in available height, try 50/50 distribution
+    if (totalHeight <= availableHeight) {
+        console.log(`✅ All sections fit on page - attempting 50/50 distribution`);
+        return distributeEvenly(sections, doc, columnWidth, availableHeight);
+    } else {
+        console.log(`⚠️ Sections exceed page height - using overflow protection`);
+        return distributeWithOverflow(sections, doc, columnWidth, availableHeight);
+    }
+}
+
+// Try to distribute sections evenly between columns (50/50 approach)
+function distributeEvenly(sections, doc, columnWidth, availableHeight) {
+    const targetHeight = availableHeight / 2; // Aim for 50% per column
+    let leftHeight = 0;
+    let rightHeight = 0;
+    const leftSections = [];
+    const rightSections = [];
+    
+    for (const section of sections) {
+        const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
+        
+        // Choose column based on which is currently shorter and can fit the section
+        const leftAfterAdd = leftHeight + sectionHeight;
+        const rightAfterAdd = rightHeight + sectionHeight;
+        
+        // Prefer left column if both can fit, or if right would exceed target more than left
+        const useLeft = (leftAfterAdd <= availableHeight) && 
+                       (rightAfterAdd > availableHeight || leftHeight <= rightHeight);
+        
+        if (useLeft) {
+            leftSections.push(section);
+            leftHeight += sectionHeight;
+            console.log(`📝 Section to LEFT: height=${sectionHeight}, leftTotal=${leftHeight}`);
+        } else {
+            rightSections.push(section);
+            rightHeight += sectionHeight;
+            console.log(`📝 Section to RIGHT: height=${sectionHeight}, rightTotal=${rightHeight}`);
+        }
+    }
+    
+    console.log(`📊 Balanced distribution: ${leftSections.length} left (${leftHeight}), ${rightSections.length} right (${rightHeight})`);
+    return { leftSections, rightSections };
+}
+
+// Fallback: sequential distribution with overflow protection
+function distributeWithOverflow(sections, doc, columnWidth, availableHeight) {
     let currentHeight = 0;
     const leftSections = [];
     const rightSections = [];
     let useRightColumn = false;
     
-    console.log(`📄 Page distribution: currentY=${currentY}, availableHeight=${availableHeight}`);
-    
     for (const section of sections) {
         const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
-        
-        console.log(`📝 Section height: ${sectionHeight}, currentHeight: ${currentHeight}, useRight: ${useRightColumn}`);
         
         // If this section would overflow the current column, switch to right column
         if (!useRightColumn && currentHeight + sectionHeight > availableHeight) {
@@ -194,21 +243,22 @@ function distributeIntoColumns(sections, doc, columnWidth) {
         currentHeight += sectionHeight;
     }
     
-    console.log(`📊 Distribution: ${leftSections.length} left sections, ${rightSections.length} right sections`);
+    console.log(`📊 Sequential distribution: ${leftSections.length} left sections, ${rightSections.length} right sections`);
     return { leftSections, rightSections };
 }
 
-// Render sections with proper formatting and overflow protection
+// Render sections with minimal page breaks - let distribution handle the layout
 function renderSections(doc, sections, columnX, columnWidth) {
     for (let i = 0; i < sections.length; i++) {
         const section = sections[i];
         
-        // Check if we need a page break before this section
+        // Only add page break if section is truly massive and would break the page
         const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
-        const bottomMargin = 80;
+        const bottomMargin = 50; // Reduced margin for less aggressive breaks
         
-        if (doc.y + sectionHeight > doc.page.height - bottomMargin) {
-            console.log(`⚠️ Section ${i} would overflow page, adding page break`);
+        // Only break page for very large sections that absolutely won't fit
+        if (sectionHeight > 400 && doc.y + sectionHeight > doc.page.height - bottomMargin) {
+            console.log(`⚠️ Very large section ${i} needs page break (height: ${sectionHeight})`);
             doc.addPage();
         }
         
