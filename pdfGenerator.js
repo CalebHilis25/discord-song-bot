@@ -158,31 +158,31 @@ function estimateSectionHeight(section, doc, width) {
     return height;
 }
 
-// Intelligently distribute sections into columns
+// Distribute sections sequentially to maintain song order
 function distributeIntoColumns(sections, doc, columnWidth) {
-    const maxColumnHeight = doc.page.height - 150; // Leave room for header/footer
-    let leftHeight = 0;
-    let rightHeight = 0;
+    const maxColumnHeight = doc.page.height - 200; // Leave room for header/footer
+    let currentHeight = 0;
     const leftSections = [];
     const rightSections = [];
+    let useRightColumn = false;
     
     for (const section of sections) {
         const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
         
-        // If adding to left column would exceed 50% and not break a section badly
-        if (leftHeight + sectionHeight > maxColumnHeight * 0.6 && rightHeight === 0) {
-            // Start right column
-            rightSections.push(section);
-            rightHeight += sectionHeight;
-        } else if (leftHeight <= rightHeight) {
-            // Add to left column
-            leftSections.push(section);
-            leftHeight += sectionHeight;
-        } else {
-            // Add to right column
-            rightSections.push(section);
-            rightHeight += sectionHeight;
+        // If this section would overflow the current column, switch to right column
+        if (!useRightColumn && currentHeight + sectionHeight > maxColumnHeight) {
+            useRightColumn = true;
+            currentHeight = 0; // Reset height for right column
         }
+        
+        // Add section to appropriate column in original order
+        if (useRightColumn) {
+            rightSections.push(section);
+        } else {
+            leftSections.push(section);
+        }
+        
+        currentHeight += sectionHeight;
     }
     
     return { leftSections, rightSections };
