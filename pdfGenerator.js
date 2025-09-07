@@ -339,7 +339,7 @@ function renderChordLyricsPair(doc, chordLine, lyricsLine, x, startY, columnWidt
     const lyricsHeight = doc.currentLineHeight();
     const spacing = 2; // Small gap between chords and lyrics
     
-    console.log(`🎵 Positioning chords: "${chordLine.trim()}" above "${lyricsLine.trim()}"`);
+    console.log(`🎵 ACCURATE positioning: "${chordLine.trim()}" above "${lyricsLine.trim()}"`);
     
     // Parse chords and find their positions
     const chordPositions = parseChordPositions(chordLine.trim());
@@ -350,25 +350,27 @@ function renderChordLyricsPair(doc, chordLine, lyricsLine, x, startY, columnWidt
     // Position for lyrics (below chords)
     const lyricsY = startY + chordHeight + spacing;
     
-    // Render chords at specific positions
+    // Calculate character width for accurate positioning
+    const avgCharWidth = doc.widthOfString('M'); // Use 'M' as it's typically the widest
+    
+    // Render chords at EXACT positions based on original spacing
     doc.font('Helvetica-Bold');
-    for (const chord of chordPositions) {
-        // Calculate X position based on character position in lyrics
-        const charPosition = Math.min(chord.position, lyricsText.length);
-        const textBefore = lyricsText.substring(0, charPosition);
-        const xOffset = doc.widthOfString(textBefore, { font: 'Helvetica' });
-        
+    for (const chordPos of chordPositions) {
+        // Calculate X position based on character position in the ORIGINAL chord line
+        // This preserves the exact spacing as intended by the user
+        const xOffset = chordPos.position * avgCharWidth * 0.55; // Adjust for monospace vs proportional font
         const chordX = x + xOffset;
         
-        console.log(`🎼 Chord "${chord.chord}" at position ${chord.position}, x=${chordX.toFixed(1)}`);
+        console.log(`🎼 Chord "${chordPos.chord}" at original position ${chordPos.position}, x=${chordX.toFixed(1)}`);
         
         // Ensure chord doesn't go beyond column width
-        if (chordX + doc.widthOfString(chord.chord) <= x + columnWidth) {
-            doc.text(chord.chord, chordX, chordY);
+        if (chordX + doc.widthOfString(chordPos.chord) <= x + columnWidth) {
+            doc.text(chordPos.chord, chordX, chordY);
         } else {
             // If chord would overflow, place it at the end of available space
-            const maxX = x + columnWidth - doc.widthOfString(chord.chord);
-            doc.text(chord.chord, Math.max(x, maxX), chordY);
+            const maxX = x + columnWidth - doc.widthOfString(chordPos.chord);
+            doc.text(chordPos.chord, Math.max(x, maxX), chordY);
+            console.log(`⚠️ Chord "${chordPos.chord}" repositioned to prevent overflow`);
         }
     }
     
@@ -384,27 +386,38 @@ function renderChordLyricsPair(doc, chordLine, lyricsLine, x, startY, columnWidt
     return afterLyricsY + 3; // Small gap after pair
 }
 
-// Parse chord line to find chord positions
+// Parse chord line to find ACCURATE chord positions preserving original spacing
 function parseChordPositions(chordLine) {
     const positions = [];
-    let currentPosition = 0;
     
-    // Split by multiple spaces to find chord positions
-    const parts = chordLine.split(/\s+/);
-    let searchIndex = 0;
+    console.log(`🔍 Analyzing chord line: "${chordLine}"`);
+    console.log(`🔍 Chord line length: ${chordLine.length}`);
     
-    for (const part of parts) {
-        if (part.trim() === '') continue;
+    // Preserve the exact spacing from the original chord line
+    let wordStart = -1;
+    
+    for (let i = 0; i <= chordLine.length; i++) {
+        const char = i < chordLine.length ? chordLine[i] : ' '; // Treat end as space
         
-        // Find where this chord appears in the original line
-        const chordIndex = chordLine.indexOf(part, searchIndex);
-        
-        if (chordIndex !== -1) {
-            positions.push({
-                chord: part,
-                position: chordIndex
-            });
-            searchIndex = chordIndex + part.length;
+        if (char !== ' ' && char !== '\t') {
+            // Start of a chord
+            if (wordStart === -1) {
+                wordStart = i;
+            }
+        } else {
+            // End of a chord (space or tab or end of line)
+            if (wordStart !== -1) {
+                const chord = chordLine.substring(wordStart, i);
+                if (chord.trim().length > 0) {
+                    positions.push({
+                        chord: chord.trim(),
+                        position: wordStart,
+                        endPosition: i
+                    });
+                    console.log(`🎼 Found chord "${chord.trim()}" at position ${wordStart}-${i}`);
+                }
+                wordStart = -1;
+            }
         }
     }
     
