@@ -123,74 +123,72 @@ function groupLyricsIntoSections(lyrics) {
 
 // Microsoft Word style column rendering - text flows from bottom of left to top of right
 function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnWidth) {
-    const startY = doc.y;
-    const bottomMargin = 100; // Increased margin for safety
-    const maxY = doc.page.height - bottomMargin;
+    const pageHeight = doc.page.height;
+    const bottomMargin = 100;
+    const topMargin = 120; // Account for header space
     
     let currentX = leftColumnX;  // Start in left column
-    let currentY = startY;
+    let currentY = doc.y;
     let isRightColumn = false;
+    let pageStartY = currentY; // Remember where this page started
     
-    console.log(`📰 Word-style columns: startY=${startY}, maxY=${maxY}, columnWidth=${columnWidth}`);
+    console.log(`📰 Starting columns: pageHeight=${pageHeight}, topMargin=${topMargin}, bottomMargin=${bottomMargin}`);
+    console.log(`📰 Available height per page: ${pageHeight - topMargin - bottomMargin}`);
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const trimmedLine = line.trim();
         
         // Calculate height needed for this line
-        let lineHeight;
-        if (trimmedLine === '') {
-            lineHeight = doc.currentLineHeight() * 0.5; // Empty line spacing
-        } else {
-            // Use text height measurement with some padding
-            lineHeight = doc.heightOfString(line, { width: columnWidth }) + 2 || doc.currentLineHeight();
-        }
+        let lineHeight = doc.currentLineHeight() + 2; // Base line height with padding
         
         // Add extra space for section headers
         if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-            lineHeight += doc.currentLineHeight() * 0.3; // Extra space after headers
+            lineHeight += 5; // Extra space after headers
         }
         
-        // Check if line would exceed page boundaries
-        while (currentY + lineHeight > maxY) {
+        // Check if we would exceed the page bottom
+        const wouldExceedPage = (currentY + lineHeight) > (pageHeight - bottomMargin);
+        
+        if (wouldExceedPage) {
             if (!isRightColumn) {
                 // Move to right column
-                console.log(`🔄 Flowing to right column at line ${i}: "${trimmedLine.substring(0, 30)}..."`);
+                console.log(`🔄 Moving to right column at line ${i}: "${trimmedLine.substring(0, 30)}..."`);
                 currentX = rightColumnX;
-                currentY = startY;
+                currentY = pageStartY; // Go back to top of page
                 isRightColumn = true;
                 
-                // Re-check if it fits in right column
-                if (currentY + lineHeight <= maxY) {
-                    break; // Fits in right column
+                // Check again if it fits in right column
+                if ((currentY + lineHeight) > (pageHeight - bottomMargin)) {
+                    // Still doesn't fit - need new page
+                    console.log(`📄 Still doesn't fit in right column - new page needed`);
+                    doc.addPage();
+                    currentX = leftColumnX;
+                    currentY = topMargin; // Start at proper top margin
+                    pageStartY = currentY;
+                    isRightColumn = false;
                 }
             } else {
-                // Both columns full - need new page
+                // Already in right column and doesn't fit - new page
                 console.log(`📄 New page needed at line ${i}: "${trimmedLine.substring(0, 30)}..."`);
                 doc.addPage();
                 currentX = leftColumnX;
-                currentY = doc.y; // Reset to new page starting position
+                currentY = topMargin; // Start at proper top margin
+                pageStartY = currentY;
                 isRightColumn = false;
-                
-                // Update maxY for new page
-                const newMaxY = doc.page.height - bottomMargin;
-                console.log(`📄 New page: startY=${currentY}, maxY=${newMaxY}`);
-                
-                // Re-check if it fits on new page
-                if (currentY + lineHeight <= newMaxY) {
-                    break; // Fits on new page
-                }
             }
         }
         
-        // Set position for rendering
+        // Now render the line at the calculated position
         doc.x = currentX;
         doc.y = currentY;
         
-        // Render the line with appropriate formatting
+        console.log(`📍 Line ${i}: column=${isRightColumn ? 'right' : 'left'}, x=${currentX}, y=${currentY.toFixed(1)}, text="${trimmedLine.substring(0, 20)}..."`);
+        
+        // Render based on line type
         if (trimmedLine === '') {
-            // Empty line - just move down
-            currentY += lineHeight;
+            // Empty line - just move down less
+            currentY += lineHeight / 2;
         } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
             // Section headers - BOLD
             doc.font('Helvetica-Bold')
@@ -202,24 +200,19 @@ function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnW
             doc.font('Helvetica-Bold')
                .text(line, currentX, currentY, { width: columnWidth });
             doc.font('Helvetica');
-            currentY += doc.currentLineHeight() + 1; // Small spacing after chords
+            currentY += lineHeight;
         } else {
             // Lyrics - NORMAL font
             doc.font('Helvetica')
                .text(line, currentX, currentY, { width: columnWidth });
-            currentY += doc.currentLineHeight() + 1; // Small spacing after lyrics
+            currentY += lineHeight;
         }
         
-        // Update doc.y to current position for next iteration
+        // Update doc.y to current position
         doc.y = currentY;
-        
-        // Debug output every 10 lines
-        if (i % 10 === 0) {
-            console.log(`📍 Line ${i}: column=${isRightColumn ? 'right' : 'left'}, y=${currentY.toFixed(1)}, maxY=${maxY}`);
-        }
     }
     
-    console.log(`✅ Word-style rendering complete. Final position: column=${isRightColumn ? 'right' : 'left'}, y=${currentY}, total lines=${lines.length}`);
+    console.log(`✅ Rendering complete. Total lines: ${lines.length}, Final column: ${isRightColumn ? 'right' : 'left'}, Final Y: ${currentY.toFixed(1)}`);
 }
 
 // Estimate section height for column distribution
