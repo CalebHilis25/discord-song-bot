@@ -99,8 +99,8 @@ async function generatePDF(song) {
 // Microsoft Word style column rendering with smart chord-lyrics grouping
 function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnWidth) {
     const pageHeight = doc.page.height;
-    const bottomMargin = 100;
-    const topMargin = 120;
+    const bottomMargin = 60; // Reduced from 100 to 60
+    const topMargin = 50;    // Reduced from 120 to 50
     
     let currentX = leftColumnX;
     let currentY = doc.y;
@@ -120,8 +120,8 @@ function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnW
         
         console.log(`📦 Group ${i}: type=${group.type}, lines=${group.lines.length}, height=${groupHeight.toFixed(1)}`);
         
-        // Check if group fits in current column
-        const wouldExceedPage = (currentY + groupHeight) > (pageHeight - bottomMargin);
+        // Check if group fits in current column (with some extra buffer)
+        const wouldExceedPage = (currentY + groupHeight + 20) > (pageHeight - bottomMargin);
         
         if (wouldExceedPage) {
             if (!isRightColumn) {
@@ -258,17 +258,17 @@ function calculateGroupHeight(doc, group, columnWidth) {
             if (trimmedLine === '') {
                 totalHeight += doc.currentLineHeight() * 0.5;
             } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-                // Section header gets extra space
+                // Section header gets extra space (reduced padding)
                 const textHeight = doc.heightOfString(line, { width: columnWidth });
-                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 8;
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 4; // Reduced from 8 to 4
             } else {
                 const textHeight = doc.heightOfString(line, { width: columnWidth });
-                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 3;
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
             }
         }
         
-        // Add some padding for section blocks
-        totalHeight += 5;
+        // Add some padding for section blocks (reduced)
+        totalHeight += 2; // Reduced from 5 to 2
     } else {
         // Original logic for other group types
         for (const line of group.lines) {
@@ -278,18 +278,18 @@ function calculateGroupHeight(doc, group, columnWidth) {
                 totalHeight += doc.currentLineHeight() * 0.5;
             } else {
                 const textHeight = doc.heightOfString(line, { width: columnWidth });
-                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 3;
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
             }
         }
         
-        // Add extra space for section headers
+        // Add extra space for section headers (reduced)
         if (group.type === 'section') {
-            totalHeight += 8;
+            totalHeight += 4; // Reduced from 8 to 4
         }
         
         // Add small gap between chord-lyrics pairs
         if (group.type === 'chord-lyrics') {
-            totalHeight += 2;
+            totalHeight += 1; // Reduced from 2 to 1
         }
     }
     
@@ -321,7 +321,7 @@ function renderGroup(doc, group, x, startY, columnWidth) {
                 doc.text(line, x, currentY, { width: columnWidth });
                 const afterY = doc.y;
                 doc.font('Helvetica');
-                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 8;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 4; // Reduced from 8 to 4
             } else if (isChordLine(trimmedLine)) {
                 // Chord line in section
                 doc.font('Helvetica-Bold');
@@ -329,19 +329,19 @@ function renderGroup(doc, group, x, startY, columnWidth) {
                 doc.text(line, x, currentY, { width: columnWidth });
                 const afterY = doc.y;
                 doc.font('Helvetica');
-                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
             } else {
                 // Lyrics line in section
                 doc.font('Helvetica');
                 const beforeY = currentY;
                 doc.text(line, x, currentY, { width: columnWidth });
                 const afterY = doc.y;
-                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
             }
         }
         
-        // Add some space after section block
-        currentY += 5;
+        // Add some space after section block (reduced)
+        currentY += 2; // Reduced from 5 to 2
     } else {
         // Original rendering for other group types
         for (let i = 0; i < group.lines.length; i++) {
@@ -360,7 +360,7 @@ function renderGroup(doc, group, x, startY, columnWidth) {
                 doc.text(line, x, currentY, { width: columnWidth });
                 const afterY = doc.y;
                 doc.font('Helvetica');
-                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 8;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 4; // Reduced from 8 to 4
             } else if (isChordLine(trimmedLine)) {
                 // Chord line
                 doc.font('Helvetica-Bold');
@@ -368,20 +368,20 @@ function renderGroup(doc, group, x, startY, columnWidth) {
                 doc.text(line, x, currentY, { width: columnWidth });
                 const afterY = doc.y;
                 doc.font('Helvetica');
-                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
             } else {
                 // Lyrics line
                 doc.font('Helvetica');
                 const beforeY = currentY;
                 doc.text(line, x, currentY, { width: columnWidth });
                 const afterY = doc.y;
-                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
             }
         }
         
-        // Add small gap after chord-lyrics pairs
+        // Add small gap after chord-lyrics pairs (reduced)
         if (group.type === 'chord-lyrics') {
-            currentY += 2;
+            currentY += 1; // Reduced from 2 to 1
         }
     }
     
