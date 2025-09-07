@@ -123,6 +123,57 @@ function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnW
         // Check if group fits in current column (with some extra buffer)
         const wouldExceedPage = (currentY + groupHeight + 20) > (pageHeight - bottomMargin);
         
+        // Special handling for section-blocks to prevent orphaned headers
+        if (group.type === 'section-block' && wouldExceedPage) {
+            // Check if we can fit at least the header + some content
+            const headerHeight = calculateGroupHeight(doc, { type: 'section', lines: [group.lines[0]] }, columnWidth);
+            const minContentLines = Math.min(3, group.lines.length - 1); // At least 3 lines of content or whatever is available
+            const minContentGroup = { type: 'section-content', lines: group.lines.slice(0, 1 + minContentLines) };
+            const minSectionHeight = calculateGroupHeight(doc, minContentGroup, columnWidth);
+            
+            // If header + minimum content fits, split the section
+            if ((currentY + minSectionHeight + 20) <= (pageHeight - bottomMargin)) {
+                console.log(`✂️ Splitting section to prevent orphaned header: keeping ${minContentLines} content lines`);
+                
+                // Render header + minimum content in current column
+                const partialGroup = { type: 'section-block', lines: group.lines.slice(0, 1 + minContentLines) };
+                currentY = renderGroup(doc, partialGroup, currentX, currentY, columnWidth);
+                
+                // Create remaining content for next column/page
+                if (group.lines.length > 1 + minContentLines) {
+                    const remainingLines = group.lines.slice(1 + minContentLines);
+                    const remainingGroup = { type: 'section-continuation', lines: remainingLines };
+                    
+                    // Move to next column/page for remaining content
+                    if (!isRightColumn) {
+                        currentX = rightColumnX;
+                        currentY = pageStartY;
+                        isRightColumn = true;
+                        
+                        if ((currentY + calculateGroupHeight(doc, remainingGroup, columnWidth)) > (pageHeight - bottomMargin)) {
+                            doc.addPage();
+                            currentX = leftColumnX;
+                            currentY = topMargin;
+                            pageStartY = currentY;
+                            isRightColumn = false;
+                        }
+                    } else {
+                        doc.addPage();
+                        currentX = leftColumnX;
+                        currentY = topMargin;
+                        pageStartY = currentY;
+                        isRightColumn = false;
+                    }
+                    
+                    currentY = renderGroup(doc, remainingGroup, currentX, currentY, columnWidth);
+                }
+                
+                doc.y = currentY;
+                continue; // Skip normal processing for this group
+            }
+        }
+        
+        // Normal page break logic for non-section groups or when section can't be split
         if (wouldExceedPage) {
             if (!isRightColumn) {
                 // Move to right column
@@ -249,8 +300,8 @@ function groupChordLyricsPairs(lines) {
 function calculateGroupHeight(doc, group, columnWidth) {
     let totalHeight = 0;
     
-    // For section blocks, we need to be more careful about height calculation
-    if (group.type === 'section-block') {
+    // For section blocks and continuations, we need to be more careful about height calculation
+    if (group.type === 'section-block' || group.type === 'section-continuation') {
         for (let i = 0; i < group.lines.length; i++) {
             const line = group.lines[i];
             const trimmedLine = line.trim();
@@ -269,6 +320,23 @@ function calculateGroupHeight(doc, group, columnWidth) {
         
         // Add some padding for section blocks (reduced)
         totalHeight += 2; // Reduced from 5 to 2
+    } else if (group.type === 'section-content') {
+        // Special handling for partial section content (used in calculations)
+        for (let i = 0; i < group.lines.length; i++) {
+            const line = group.lines[i];
+            const trimmedLine = line.trim();
+            
+            if (trimmedLine === '') {
+                totalHeight += doc.currentLineHeight() * 0.5;
+            } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 4;
+            } else {
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 1;
+            }
+        }
+        totalHeight += 2;
     } else {
         // Original logic for other group types
         for (const line of group.lines) {
@@ -300,9 +368,9 @@ function calculateGroupHeight(doc, group, columnWidth) {
 function renderGroup(doc, group, x, startY, columnWidth) {
     let currentY = startY;
     
-    // Handle section blocks specially
-    if (group.type === 'section-block') {
-        console.log(`📋 Rendering section block with ${group.lines.length} lines`);
+    // Handle section blocks and section continuations specially
+    if (group.type === 'section-block' || group.type === 'section-continuation') {
+        console.log(`📋 Rendering ${group.type} with ${group.lines.length} lines`);
         
         for (let i = 0; i < group.lines.length; i++) {
             const line = group.lines[i];
