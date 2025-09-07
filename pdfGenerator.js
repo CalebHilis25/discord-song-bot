@@ -121,121 +121,201 @@ function groupLyricsIntoSections(lyrics) {
     return sections;
 }
 
-// Microsoft Word style column rendering - text flows from bottom of left to top of right
+// Microsoft Word style column rendering with smart chord-lyrics grouping
 function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnWidth) {
     const pageHeight = doc.page.height;
     const bottomMargin = 100;
-    const topMargin = 120; // Account for header space
+    const topMargin = 120;
     
-    let currentX = leftColumnX;  // Start in left column
+    let currentX = leftColumnX;
     let currentY = doc.y;
     let isRightColumn = false;
-    let pageStartY = currentY; // Remember where this page started
+    let pageStartY = currentY;
     
-    console.log(`📰 Starting columns: pageHeight=${pageHeight}, topMargin=${topMargin}, bottomMargin=${bottomMargin}`);
-    console.log(`📰 Available height per page: ${pageHeight - topMargin - bottomMargin}`);
+    console.log(`📰 Starting smart chord-lyrics rendering...`);
     
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const trimmedLine = line.trim();
+    // Group lines into chord-lyrics pairs and standalone items
+    const groups = groupChordLyricsPairs(lines);
+    
+    for (let i = 0; i < groups.length; i++) {
+        const group = groups[i];
         
-        // Calculate height needed for this line - PROPERLY account for text wrapping
-        let lineHeight;
-        if (trimmedLine === '') {
-            lineHeight = doc.currentLineHeight() * 0.5; // Empty line spacing
-        } else {
-            // Calculate actual height needed for this text within column width
-            const textHeight = doc.heightOfString(line, { 
-                width: columnWidth,
-                lineGap: 0
-            });
-            lineHeight = Math.max(textHeight, doc.currentLineHeight()) + 3; // Minimum one line + padding
-        }
+        // Calculate total height needed for this group
+        const groupHeight = calculateGroupHeight(doc, group, columnWidth);
         
-        // Add extra space for section headers
-        if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-            lineHeight += 8; // Extra space after headers
-        }
+        console.log(`� Group ${i}: type=${group.type}, lines=${group.lines.length}, height=${groupHeight.toFixed(1)}`);
         
-        console.log(`📏 Line ${i}: "${trimmedLine.substring(0, 25)}..." height=${lineHeight.toFixed(1)}`);
-        
-        // Check if we would exceed the page bottom
-        const wouldExceedPage = (currentY + lineHeight) > (pageHeight - bottomMargin);
+        // Check if group fits in current column
+        const wouldExceedPage = (currentY + groupHeight) > (pageHeight - bottomMargin);
         
         if (wouldExceedPage) {
             if (!isRightColumn) {
                 // Move to right column
-                console.log(`🔄 Moving to right column at line ${i}: "${trimmedLine.substring(0, 30)}..."`);
+                console.log(`🔄 Moving group ${i} to right column`);
                 currentX = rightColumnX;
-                currentY = pageStartY; // Go back to top of page
+                currentY = pageStartY;
                 isRightColumn = true;
                 
-                // Check again if it fits in right column
-                if ((currentY + lineHeight) > (pageHeight - bottomMargin)) {
-                    // Still doesn't fit - need new page
-                    console.log(`📄 Still doesn't fit in right column - new page needed`);
+                // Check if it fits in right column
+                if ((currentY + groupHeight) > (pageHeight - bottomMargin)) {
+                    console.log(`📄 Group ${i} needs new page`);
                     doc.addPage();
                     currentX = leftColumnX;
-                    currentY = topMargin; // Start at proper top margin
+                    currentY = topMargin;
                     pageStartY = currentY;
                     isRightColumn = false;
                 }
             } else {
-                // Already in right column and doesn't fit - new page
-                console.log(`📄 New page needed at line ${i}: "${trimmedLine.substring(0, 30)}..."`);
+                // Need new page
+                console.log(`📄 Group ${i} needs new page`);
                 doc.addPage();
                 currentX = leftColumnX;
-                currentY = topMargin; // Start at proper top margin
+                currentY = topMargin;
                 pageStartY = currentY;
                 isRightColumn = false;
             }
         }
         
-        // Now render the line at the calculated position
-        doc.x = currentX;
-        doc.y = currentY;
-        
-        console.log(`📍 Line ${i}: column=${isRightColumn ? 'right' : 'left'}, x=${currentX}, y=${currentY.toFixed(1)}, text="${trimmedLine.substring(0, 20)}..."`);
-        
-        // Render based on line type with PROPER height calculation
-        if (trimmedLine === '') {
-            // Empty line - just move down less
-            currentY += lineHeight;
-        } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-            // Section headers - BOLD
-            doc.font('Helvetica-Bold');
-            const beforeY = currentY;
-            doc.text(line, currentX, currentY, { width: columnWidth });
-            const afterY = doc.y;
-            const actualHeight = Math.max(afterY - beforeY, lineHeight);
-            doc.font('Helvetica');
-            currentY = beforeY + actualHeight;
-        } else if (isChordLine(trimmedLine)) {
-            // Chord lines - BOLD
-            doc.font('Helvetica-Bold');
-            const beforeY = currentY;
-            doc.text(line, currentX, currentY, { width: columnWidth });
-            const afterY = doc.y;
-            const actualHeight = Math.max(afterY - beforeY, lineHeight);
-            doc.font('Helvetica');
-            currentY = beforeY + actualHeight;
-        } else {
-            // Lyrics - NORMAL font - This is where wrapping matters most!
-            doc.font('Helvetica');
-            const beforeY = currentY;
-            doc.text(line, currentX, currentY, { width: columnWidth });
-            const afterY = doc.y;
-            const actualHeight = Math.max(afterY - beforeY, lineHeight);
-            currentY = beforeY + actualHeight;
-            
-            console.log(`📐 Lyrics wrapped: beforeY=${beforeY.toFixed(1)}, afterY=${afterY.toFixed(1)}, actualHeight=${actualHeight.toFixed(1)}`);
-        }
-        
-        // Update doc.y to current position
+        // Render the entire group together
+        currentY = renderGroup(doc, group, currentX, currentY, columnWidth);
         doc.y = currentY;
     }
     
-    console.log(`✅ Rendering complete. Total lines: ${lines.length}, Final column: ${isRightColumn ? 'right' : 'left'}, Final Y: ${currentY.toFixed(1)}`);
+    console.log(`✅ Smart rendering complete. Final Y: ${currentY.toFixed(1)}`);
+}
+
+// Group lines into chord-lyrics pairs and standalone items
+function groupChordLyricsPairs(lines) {
+    const groups = [];
+    let i = 0;
+    
+    while (i < lines.length) {
+        const currentLine = lines[i].trim();
+        
+        // Section headers - standalone
+        if (currentLine.startsWith('[') && currentLine.endsWith(']')) {
+            groups.push({
+                type: 'section',
+                lines: [lines[i]]
+            });
+            i++;
+        }
+        // Empty lines - standalone
+        else if (currentLine === '') {
+            groups.push({
+                type: 'empty',
+                lines: [lines[i]]
+            });
+            i++;
+        }
+        // Chord line - check if next line is lyrics
+        else if (isChordLine(currentLine)) {
+            const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+            
+            if (nextLine && !nextLine.startsWith('[') && !nextLine.endsWith(']') && !isChordLine(nextLine)) {
+                // Chord-lyrics pair
+                groups.push({
+                    type: 'chord-lyrics',
+                    lines: [lines[i], lines[i + 1]]
+                });
+                i += 2; // Skip both lines
+                console.log(`🎵 Chord-lyrics pair: "${currentLine}" + "${nextLine}"`);
+            } else {
+                // Standalone chord
+                groups.push({
+                    type: 'chord',
+                    lines: [lines[i]]
+                });
+                i++;
+            }
+        }
+        // Regular lyrics line
+        else {
+            groups.push({
+                type: 'lyrics',
+                lines: [lines[i]]
+            });
+            i++;
+        }
+    }
+    
+    console.log(`📊 Created ${groups.length} groups from ${lines.length} lines`);
+    return groups;
+}
+
+// Calculate total height needed for a group
+function calculateGroupHeight(doc, group, columnWidth) {
+    let totalHeight = 0;
+    
+    for (const line of group.lines) {
+        const trimmedLine = line.trim();
+        
+        if (trimmedLine === '') {
+            totalHeight += doc.currentLineHeight() * 0.5;
+        } else {
+            const textHeight = doc.heightOfString(line, { width: columnWidth });
+            totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 3;
+        }
+    }
+    
+    // Add extra space for section headers
+    if (group.type === 'section') {
+        totalHeight += 8;
+    }
+    
+    // Add small gap between chord-lyrics pairs
+    if (group.type === 'chord-lyrics') {
+        totalHeight += 2;
+    }
+    
+    return totalHeight;
+}
+
+// Render a complete group (keeping chord-lyrics together)
+function renderGroup(doc, group, x, startY, columnWidth) {
+    let currentY = startY;
+    
+    for (let i = 0; i < group.lines.length; i++) {
+        const line = group.lines[i];
+        const trimmedLine = line.trim();
+        
+        doc.x = x;
+        doc.y = currentY;
+        
+        if (trimmedLine === '') {
+            currentY += doc.currentLineHeight() * 0.5;
+        } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+            // Section header
+            doc.font('Helvetica-Bold');
+            const beforeY = currentY;
+            doc.text(line, x, currentY, { width: columnWidth });
+            const afterY = doc.y;
+            doc.font('Helvetica');
+            currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 8;
+        } else if (isChordLine(trimmedLine)) {
+            // Chord line
+            doc.font('Helvetica-Bold');
+            const beforeY = currentY;
+            doc.text(line, x, currentY, { width: columnWidth });
+            const afterY = doc.y;
+            doc.font('Helvetica');
+            currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+        } else {
+            // Lyrics line
+            doc.font('Helvetica');
+            const beforeY = currentY;
+            doc.text(line, x, currentY, { width: columnWidth });
+            const afterY = doc.y;
+            currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+        }
+    }
+    
+    // Add small gap after chord-lyrics pairs
+    if (group.type === 'chord-lyrics') {
+        currentY += 2;
+    }
+    
+    return currentY;
 }
 
 // Estimate section height for column distribution
