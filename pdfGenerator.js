@@ -184,7 +184,7 @@ function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnW
     console.log(`✅ Smart rendering complete. Final Y: ${currentY.toFixed(1)}`);
 }
 
-// Group lines into chord-lyrics pairs and standalone items
+// Group lines into logical sections with headers staying with their content
 function groupChordLyricsPairs(lines) {
     const groups = [];
     let i = 0;
@@ -192,50 +192,77 @@ function groupChordLyricsPairs(lines) {
     while (i < lines.length) {
         const currentLine = lines[i].trim();
         
-        // Section headers - standalone
+        // Section headers - collect header + following content as one group
         if (currentLine.startsWith('[') && currentLine.endsWith(']')) {
-            groups.push({
-                type: 'section',
-                lines: [lines[i]]
-            });
-            i++;
-        }
-        // Empty lines - standalone
-        else if (currentLine === '') {
-            groups.push({
-                type: 'empty',
-                lines: [lines[i]]
-            });
-            i++;
-        }
-        // Chord line - check if next line is lyrics
-        else if (isChordLine(currentLine)) {
-            const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+            const sectionGroup = {
+                type: 'section-block',
+                lines: [lines[i]], // Start with header
+                hasContent: false
+            };
             
-            if (nextLine && !nextLine.startsWith('[') && !nextLine.endsWith(']') && !isChordLine(nextLine)) {
-                // Chord-lyrics pair
+            i++; // Move past header
+            
+            // Collect all content until next section or end
+            while (i < lines.length) {
+                const nextLine = lines[i].trim();
+                
+                // Stop if we hit another section header
+                if (nextLine.startsWith('[') && nextLine.endsWith(']')) {
+                    break;
+                }
+                
+                sectionGroup.lines.push(lines[i]);
+                
+                // Mark that this section has content (not just empty lines)
+                if (nextLine !== '') {
+                    sectionGroup.hasContent = true;
+                }
+                
+                i++;
+            }
+            
+            console.log(`📂 Section block: "${currentLine}" with ${sectionGroup.lines.length - 1} content lines`);
+            groups.push(sectionGroup);
+        }
+        // Handle orphaned content (content without section header)
+        else {
+            // For content without a section header, use the old logic
+            if (currentLine === '') {
                 groups.push({
-                    type: 'chord-lyrics',
-                    lines: [lines[i], lines[i + 1]]
-                });
-                i += 2; // Skip both lines
-                console.log(`🎵 Chord-lyrics pair: "${currentLine}" + "${nextLine}"`);
-            } else {
-                // Standalone chord
-                groups.push({
-                    type: 'chord',
+                    type: 'empty',
                     lines: [lines[i]]
                 });
                 i++;
             }
-        }
-        // Regular lyrics line
-        else {
-            groups.push({
-                type: 'lyrics',
-                lines: [lines[i]]
-            });
-            i++;
+            // Chord line - check if next line is lyrics
+            else if (isChordLine(currentLine)) {
+                const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+                
+                if (nextLine && !nextLine.startsWith('[') && !nextLine.endsWith(']') && !isChordLine(nextLine)) {
+                    // Chord-lyrics pair
+                    groups.push({
+                        type: 'chord-lyrics',
+                        lines: [lines[i], lines[i + 1]]
+                    });
+                    i += 2; // Skip both lines
+                    console.log(`🎵 Orphaned chord-lyrics pair: "${currentLine}" + "${nextLine}"`);
+                } else {
+                    // Standalone chord
+                    groups.push({
+                        type: 'chord',
+                        lines: [lines[i]]
+                    });
+                    i++;
+                }
+            }
+            // Regular lyrics line
+            else {
+                groups.push({
+                    type: 'lyrics',
+                    lines: [lines[i]]
+                });
+                i++;
+            }
         }
     }
     
@@ -247,72 +274,140 @@ function groupChordLyricsPairs(lines) {
 function calculateGroupHeight(doc, group, columnWidth) {
     let totalHeight = 0;
     
-    for (const line of group.lines) {
-        const trimmedLine = line.trim();
-        
-        if (trimmedLine === '') {
-            totalHeight += doc.currentLineHeight() * 0.5;
-        } else {
-            const textHeight = doc.heightOfString(line, { width: columnWidth });
-            totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 3;
+    // For section blocks, we need to be more careful about height calculation
+    if (group.type === 'section-block') {
+        for (let i = 0; i < group.lines.length; i++) {
+            const line = group.lines[i];
+            const trimmedLine = line.trim();
+            
+            if (trimmedLine === '') {
+                totalHeight += doc.currentLineHeight() * 0.5;
+            } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+                // Section header gets extra space
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 8;
+            } else {
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 3;
+            }
         }
-    }
-    
-    // Add extra space for section headers
-    if (group.type === 'section') {
-        totalHeight += 8;
-    }
-    
-    // Add small gap between chord-lyrics pairs
-    if (group.type === 'chord-lyrics') {
-        totalHeight += 2;
+        
+        // Add some padding for section blocks
+        totalHeight += 5;
+    } else {
+        // Original logic for other group types
+        for (const line of group.lines) {
+            const trimmedLine = line.trim();
+            
+            if (trimmedLine === '') {
+                totalHeight += doc.currentLineHeight() * 0.5;
+            } else {
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 3;
+            }
+        }
+        
+        // Add extra space for section headers
+        if (group.type === 'section') {
+            totalHeight += 8;
+        }
+        
+        // Add small gap between chord-lyrics pairs
+        if (group.type === 'chord-lyrics') {
+            totalHeight += 2;
+        }
     }
     
     return totalHeight;
 }
 
-// Render a complete group (keeping chord-lyrics together)
+// Render a complete group (keeping related content together)
 function renderGroup(doc, group, x, startY, columnWidth) {
     let currentY = startY;
     
-    for (let i = 0; i < group.lines.length; i++) {
-        const line = group.lines[i];
-        const trimmedLine = line.trim();
+    // Handle section blocks specially
+    if (group.type === 'section-block') {
+        console.log(`📋 Rendering section block with ${group.lines.length} lines`);
         
-        doc.x = x;
-        doc.y = currentY;
-        
-        if (trimmedLine === '') {
-            currentY += doc.currentLineHeight() * 0.5;
-        } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-            // Section header
-            doc.font('Helvetica-Bold');
-            const beforeY = currentY;
-            doc.text(line, x, currentY, { width: columnWidth });
-            const afterY = doc.y;
-            doc.font('Helvetica');
-            currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 8;
-        } else if (isChordLine(trimmedLine)) {
-            // Chord line
-            doc.font('Helvetica-Bold');
-            const beforeY = currentY;
-            doc.text(line, x, currentY, { width: columnWidth });
-            const afterY = doc.y;
-            doc.font('Helvetica');
-            currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
-        } else {
-            // Lyrics line
-            doc.font('Helvetica');
-            const beforeY = currentY;
-            doc.text(line, x, currentY, { width: columnWidth });
-            const afterY = doc.y;
-            currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+        for (let i = 0; i < group.lines.length; i++) {
+            const line = group.lines[i];
+            const trimmedLine = line.trim();
+            
+            doc.x = x;
+            doc.y = currentY;
+            
+            if (trimmedLine === '') {
+                currentY += doc.currentLineHeight() * 0.5;
+            } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+                // Section header - bold with extra space
+                console.log(`📌 Section header: "${trimmedLine}"`);
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 8;
+            } else if (isChordLine(trimmedLine)) {
+                // Chord line in section
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+            } else {
+                // Lyrics line in section
+                doc.font('Helvetica');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+            }
         }
-    }
-    
-    // Add small gap after chord-lyrics pairs
-    if (group.type === 'chord-lyrics') {
-        currentY += 2;
+        
+        // Add some space after section block
+        currentY += 5;
+    } else {
+        // Original rendering for other group types
+        for (let i = 0; i < group.lines.length; i++) {
+            const line = group.lines[i];
+            const trimmedLine = line.trim();
+            
+            doc.x = x;
+            doc.y = currentY;
+            
+            if (trimmedLine === '') {
+                currentY += doc.currentLineHeight() * 0.5;
+            } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+                // Section header
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 8;
+            } else if (isChordLine(trimmedLine)) {
+                // Chord line
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+            } else {
+                // Lyrics line
+                doc.font('Helvetica');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+            }
+        }
+        
+        // Add small gap after chord-lyrics pairs
+        if (group.type === 'chord-lyrics') {
+            currentY += 2;
+        }
     }
     
     return currentY;
