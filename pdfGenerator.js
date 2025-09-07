@@ -139,13 +139,25 @@ function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnW
         const line = lines[i];
         const trimmedLine = line.trim();
         
-        // Calculate height needed for this line
-        let lineHeight = doc.currentLineHeight() + 2; // Base line height with padding
+        // Calculate height needed for this line - PROPERLY account for text wrapping
+        let lineHeight;
+        if (trimmedLine === '') {
+            lineHeight = doc.currentLineHeight() * 0.5; // Empty line spacing
+        } else {
+            // Calculate actual height needed for this text within column width
+            const textHeight = doc.heightOfString(line, { 
+                width: columnWidth,
+                lineGap: 0
+            });
+            lineHeight = Math.max(textHeight, doc.currentLineHeight()) + 3; // Minimum one line + padding
+        }
         
         // Add extra space for section headers
         if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-            lineHeight += 5; // Extra space after headers
+            lineHeight += 8; // Extra space after headers
         }
+        
+        console.log(`📏 Line ${i}: "${trimmedLine.substring(0, 25)}..." height=${lineHeight.toFixed(1)}`);
         
         // Check if we would exceed the page bottom
         const wouldExceedPage = (currentY + lineHeight) > (pageHeight - bottomMargin);
@@ -185,27 +197,38 @@ function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnW
         
         console.log(`📍 Line ${i}: column=${isRightColumn ? 'right' : 'left'}, x=${currentX}, y=${currentY.toFixed(1)}, text="${trimmedLine.substring(0, 20)}..."`);
         
-        // Render based on line type
+        // Render based on line type with PROPER height calculation
         if (trimmedLine === '') {
             // Empty line - just move down less
-            currentY += lineHeight / 2;
+            currentY += lineHeight;
         } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
             // Section headers - BOLD
-            doc.font('Helvetica-Bold')
-               .text(line, currentX, currentY, { width: columnWidth });
+            doc.font('Helvetica-Bold');
+            const beforeY = currentY;
+            doc.text(line, currentX, currentY, { width: columnWidth });
+            const afterY = doc.y;
+            const actualHeight = Math.max(afterY - beforeY, lineHeight);
             doc.font('Helvetica');
-            currentY += lineHeight;
+            currentY = beforeY + actualHeight;
         } else if (isChordLine(trimmedLine)) {
             // Chord lines - BOLD
-            doc.font('Helvetica-Bold')
-               .text(line, currentX, currentY, { width: columnWidth });
+            doc.font('Helvetica-Bold');
+            const beforeY = currentY;
+            doc.text(line, currentX, currentY, { width: columnWidth });
+            const afterY = doc.y;
+            const actualHeight = Math.max(afterY - beforeY, lineHeight);
             doc.font('Helvetica');
-            currentY += lineHeight;
+            currentY = beforeY + actualHeight;
         } else {
-            // Lyrics - NORMAL font
-            doc.font('Helvetica')
-               .text(line, currentX, currentY, { width: columnWidth });
-            currentY += lineHeight;
+            // Lyrics - NORMAL font - This is where wrapping matters most!
+            doc.font('Helvetica');
+            const beforeY = currentY;
+            doc.text(line, currentX, currentY, { width: columnWidth });
+            const afterY = doc.y;
+            const actualHeight = Math.max(afterY - beforeY, lineHeight);
+            currentY = beforeY + actualHeight;
+            
+            console.log(`📐 Lyrics wrapped: beforeY=${beforeY.toFixed(1)}, afterY=${afterY.toFixed(1)}, actualHeight=${actualHeight.toFixed(1)}`);
         }
         
         // Update doc.y to current position
