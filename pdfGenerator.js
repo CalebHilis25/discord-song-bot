@@ -247,75 +247,170 @@ function groupChordLyricsPairs(lines) {
 function calculateGroupHeight(doc, group, columnWidth) {
     let totalHeight = 0;
     
-    for (const line of group.lines) {
-        const trimmedLine = line.trim();
+    if (group.type === 'chord-lyrics') {
+        // For chord-lyrics pairs, account for both chord and lyrics height
+        const chordHeight = doc.currentLineHeight();
+        const lyricsHeight = doc.currentLineHeight();
+        const spacing = 2;
+        totalHeight = chordHeight + spacing + lyricsHeight + 3; // 3 for gap after pair
+    } else {
+        // Regular calculation for other group types
+        for (const line of group.lines) {
+            const trimmedLine = line.trim();
+            
+            if (trimmedLine === '') {
+                totalHeight += doc.currentLineHeight() * 0.5;
+            } else {
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 3;
+            }
+        }
         
-        if (trimmedLine === '') {
-            totalHeight += doc.currentLineHeight() * 0.5;
-        } else {
-            const textHeight = doc.heightOfString(line, { width: columnWidth });
-            totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 3;
+        // Add extra space for section headers
+        if (group.type === 'section') {
+            totalHeight += 8;
         }
     }
     
-    // Add extra space for section headers
-    if (group.type === 'section') {
-        totalHeight += 8;
-    }
-    
-    // Add small gap between chord-lyrics pairs
-    if (group.type === 'chord-lyrics') {
-        totalHeight += 2;
-    }
+    // Add gap after groups
+    totalHeight += 4;
     
     return totalHeight;
 }
 
-// Render a complete group (keeping chord-lyrics together)
+// Render a complete group with proper chord positioning
 function renderGroup(doc, group, x, startY, columnWidth) {
     let currentY = startY;
     
-    for (let i = 0; i < group.lines.length; i++) {
-        const line = group.lines[i];
-        const trimmedLine = line.trim();
+    if (group.type === 'chord-lyrics') {
+        // Special handling for chord-lyrics pairs - position chords above lyrics
+        const chordLine = group.lines[0];
+        const lyricsLine = group.lines[1];
         
-        doc.x = x;
-        doc.y = currentY;
+        currentY = renderChordLyricsPair(doc, chordLine, lyricsLine, x, currentY, columnWidth);
         
-        if (trimmedLine === '') {
-            currentY += doc.currentLineHeight() * 0.5;
-        } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-            // Section header
-            doc.font('Helvetica-Bold');
-            const beforeY = currentY;
-            doc.text(line, x, currentY, { width: columnWidth });
-            const afterY = doc.y;
-            doc.font('Helvetica');
-            currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 8;
-        } else if (isChordLine(trimmedLine)) {
-            // Chord line
-            doc.font('Helvetica-Bold');
-            const beforeY = currentY;
-            doc.text(line, x, currentY, { width: columnWidth });
-            const afterY = doc.y;
-            doc.font('Helvetica');
-            currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
-        } else {
-            // Lyrics line
-            doc.font('Helvetica');
-            const beforeY = currentY;
-            doc.text(line, x, currentY, { width: columnWidth });
-            const afterY = doc.y;
-            currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+    } else {
+        // Regular rendering for other group types
+        for (let i = 0; i < group.lines.length; i++) {
+            const line = group.lines[i];
+            const trimmedLine = line.trim();
+            
+            doc.x = x;
+            doc.y = currentY;
+            
+            if (trimmedLine === '') {
+                currentY += doc.currentLineHeight() * 0.5;
+            } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+                // Section header
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 8;
+            } else if (isChordLine(trimmedLine)) {
+                // Standalone chord line
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+            } else {
+                // Regular lyrics line
+                doc.font('Helvetica');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 3;
+            }
         }
     }
     
-    // Add small gap after chord-lyrics pairs
-    if (group.type === 'chord-lyrics') {
-        currentY += 2;
-    }
+    // Add small gap after groups
+    currentY += 4;
     
     return currentY;
+}
+
+// Render chord-lyrics pair with proper positioning
+function renderChordLyricsPair(doc, chordLine, lyricsLine, x, startY, columnWidth) {
+    const chordHeight = doc.currentLineHeight();
+    const lyricsHeight = doc.currentLineHeight();
+    const spacing = 2; // Small gap between chords and lyrics
+    
+    console.log(`🎵 Positioning chords: "${chordLine.trim()}" above "${lyricsLine.trim()}"`);
+    
+    // Parse chords and find their positions
+    const chordPositions = parseChordPositions(chordLine.trim());
+    const lyricsText = lyricsLine.trim();
+    
+    // Position for chords (above lyrics)
+    const chordY = startY;
+    // Position for lyrics (below chords)
+    const lyricsY = startY + chordHeight + spacing;
+    
+    // Render chords at specific positions
+    doc.font('Helvetica-Bold');
+    for (const chord of chordPositions) {
+        // Calculate X position based on character position in lyrics
+        const charPosition = Math.min(chord.position, lyricsText.length);
+        const textBefore = lyricsText.substring(0, charPosition);
+        const xOffset = doc.widthOfString(textBefore, { font: 'Helvetica' });
+        
+        const chordX = x + xOffset;
+        
+        console.log(`🎼 Chord "${chord.chord}" at position ${chord.position}, x=${chordX.toFixed(1)}`);
+        
+        // Ensure chord doesn't go beyond column width
+        if (chordX + doc.widthOfString(chord.chord) <= x + columnWidth) {
+            doc.text(chord.chord, chordX, chordY);
+        } else {
+            // If chord would overflow, place it at the end of available space
+            const maxX = x + columnWidth - doc.widthOfString(chord.chord);
+            doc.text(chord.chord, Math.max(x, maxX), chordY);
+        }
+    }
+    
+    // Render lyrics
+    doc.font('Helvetica');
+    doc.text(lyricsText, x, lyricsY, { width: columnWidth });
+    
+    // Return position after both chord and lyrics
+    const afterLyricsY = Math.max(lyricsY + lyricsHeight, doc.y);
+    
+    console.log(`📍 Chord-lyrics pair complete: chordY=${chordY}, lyricsY=${lyricsY}, afterY=${afterLyricsY}`);
+    
+    return afterLyricsY + 3; // Small gap after pair
+}
+
+// Parse chord line to find chord positions
+function parseChordPositions(chordLine) {
+    const positions = [];
+    let currentPosition = 0;
+    
+    // Split by multiple spaces to find chord positions
+    const parts = chordLine.split(/\s+/);
+    let searchIndex = 0;
+    
+    for (const part of parts) {
+        if (part.trim() === '') continue;
+        
+        // Find where this chord appears in the original line
+        const chordIndex = chordLine.indexOf(part, searchIndex);
+        
+        if (chordIndex !== -1) {
+            positions.push({
+                chord: part,
+                position: chordIndex
+            });
+            searchIndex = chordIndex + part.length;
+        }
+    }
+    
+    console.log(`🔍 Parsed chords: ${positions.map(p => `${p.chord}@${p.position}`).join(', ')}`);
+    
+    return positions;
 }
 
 // Estimate section height for column distribution
