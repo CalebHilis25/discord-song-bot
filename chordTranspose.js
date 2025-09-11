@@ -26,19 +26,22 @@ function transposeChord(chord, steps, targetKey = null) {
         transposedBass = normalizeEnharmonic(transposedBass, targetKey);
         return `${transposedMain}/${transposedBass}${suffix}`;
     }
-// Normalize double sharps/flats and choose correct enharmonic equivalent
+// Normalize double sharps/flats and non-standard chord names to standard chord names
 function normalizeEnharmonic(note, targetKey) {
     // Remove double sharps/flats
     note = note.replace('##', '');
     note = note.replace('bb', '');
+    // Map double sharps/flats and non-standard notes to standard chord names
+    const doubleSharpMap = {
+        'C##': 'D', 'D##': 'E', 'E##': 'F#', 'F##': 'G', 'G##': 'A', 'A##': 'B', 'B##': 'C#',
+        'Cbb': 'Bb', 'Dbb': 'C', 'Ebb': 'D', 'Fbb': 'D#', 'Gbb': 'F', 'Abb': 'G', 'Bbb': 'A'
+    };
+    if (doubleSharpMap[note]) return doubleSharpMap[note];
     // Map unnatural notes to correct enharmonic equivalents
     const enharmonicMap = {
         'E#': 'F', 'B#': 'C', 'Cb': 'B', 'Fb': 'E'
     };
-    // Always use sharps for accidentals
-    if (enharmonicMap[note]) {
-        return enharmonicMap[note];
-    }
+    if (enharmonicMap[note]) return enharmonicMap[note];
     // If it's a natural note, keep as is
     if (CHORDS_SHARP.includes(note) && !note.includes('#') && !note.includes('b')) {
         return note;
