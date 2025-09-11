@@ -278,7 +278,7 @@ client.on('messageCreate', async (message) => {
                         return line;
                     });
                     const transposedSong = {
-                        title: `${userState.songTitle} (Transposed ${steps > 0 ? 'Up' : 'Down'} Half Step)`,
+                               title: userState.songTitle,
                         artist: userState.artistName,
                         lyrics: transposedLyrics
                     };
@@ -335,7 +335,7 @@ client.on('messageCreate', async (message) => {
                 });
                 // Generate transposed PDF
                 const transposedSong = {
-                    title: `${userState.songTitle} (Transposed to ${userState.targetKey})`,
+                       title: userState.songTitle,
                     artist: userState.artistName,
                     lyrics: transposedLyrics
                 };
