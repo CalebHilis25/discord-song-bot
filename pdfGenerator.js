@@ -62,9 +62,10 @@ async function generatePDF(song) {
             doc.fontSize(11)
                .font('Helvetica');
             
-            // Flow text in columns like Microsoft Word
+            // Flow text in columns like Microsoft Word with section spacing
             const allLines = song.lyrics || [];
-            renderInWordStyleColumns(doc, allLines, leftColumnX, rightColumnX, columnWidth);
+            const linesWithSpacing = addSectionSpacing(allLines);
+            renderInWordStyleColumns(doc, linesWithSpacing, leftColumnX, rightColumnX, columnWidth);
             
             // Footer
             doc.fontSize(8)
@@ -96,327 +97,391 @@ async function generatePDF(song) {
     });
 }
 
-// Group lyrics into logical sections
-function groupLyricsIntoSections(lyrics) {
-    const sections = [];
-    let currentSection = [];
-    
-    for (const line of lyrics) {
-        const trimmedLine = line.trim();
-        
-        // If we hit a section header and have content, save current section
-        if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']') && currentSection.length > 0) {
-            sections.push([...currentSection]);
-            currentSection = [line];
-        } else {
-            currentSection.push(line);
-        }
-    }
-    
-    // Add the last section
-    if (currentSection.length > 0) {
-        sections.push(currentSection);
-    }
-    
-    return sections;
-}
-
-// Microsoft Word style column rendering - text flows from bottom of left to top of right
-function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnWidth) {
-    const startY = doc.y;
-    const bottomMargin = 80;
-    const maxY = doc.page.height - bottomMargin;
-    
-    let currentX = leftColumnX;  // Start in left column
-    let currentY = startY;
-    let isRightColumn = false;
-    
-    console.log(`📰 Word-style columns: startY=${startY}, maxY=${maxY}, columnWidth=${columnWidth}`);
+// Add spacing between song sections (1 empty line after each section block)
+function addSectionSpacing(lines) {
+    const linesWithSpacing = [];
     
     for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const trimmedLine = line.trim();
+        const currentLine = lines[i];
+        const nextLine = i < lines.length - 1 ? lines[i + 1] : '';
+        const trimmedCurrent = currentLine.trim();
+        const trimmedNext = nextLine.trim();
         
-        // Calculate height needed for this line based on content
-        let lineHeight = doc.currentLineHeight();
+        // Add current line
+        linesWithSpacing.push(currentLine);
         
-        // Check if this line will fit in current column
-        const willFitInCurrentColumn = (currentY + lineHeight) <= maxY;
-        
-        // If line won't fit and we're in left column, switch to right
-        if (!willFitInCurrentColumn && !isRightColumn) {
-            console.log(`🔄 Switching to right column at line ${i}: "${trimmedLine.substring(0, 30)}..."`);
-            currentX = rightColumnX;
-            currentY = startY;
-            isRightColumn = true;
-        }
-        // If line won't fit and we're in right column, new page
-        else if (!willFitInCurrentColumn && isRightColumn) {
-            console.log(`📄 New page needed at line ${i}`);
-            doc.addPage();
-            currentX = leftColumnX;
-            currentY = doc.y;
-            isRightColumn = false;
-        }
-        
-        // Set position and render the line
-        doc.x = currentX;
-        doc.y = currentY;
-        
-        if (trimmedLine === '') {
-            // Empty line - small spacing
-            currentY += lineHeight * 0.5;
-        } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-            // Section headers - BOLD
-            doc.font('Helvetica-Bold');
-            doc.text(line, currentX, currentY, { width: columnWidth });
-            doc.font('Helvetica');
-            currentY = doc.y + (lineHeight * 0.2); // Small space after headers
-        } else if (isChordLine(trimmedLine)) {
-            // Chord lines - BOLD
-            doc.font('Helvetica-Bold');
-            doc.text(line, currentX, currentY, { width: columnWidth });
-            doc.font('Helvetica');
-            currentY = doc.y;
-        } else {
-            // Lyrics - NORMAL font
-            doc.font('Helvetica');
-            doc.text(line, currentX, currentY, { width: columnWidth });
-            currentY = doc.y;
-        }
-        
-        console.log(`📝 Line ${i}: "${trimmedLine.substring(0, 20)}..." at y=${currentY.toFixed(1)} in ${isRightColumn ? 'RIGHT' : 'LEFT'} column`);
-    }
-    
-    console.log(`✅ Word-style rendering complete. Final position: column=${isRightColumn ? 'right' : 'left'}, y=${currentY}`);
-}
-
-// Estimate section height for column distribution
-function estimateSectionHeight(section, doc, width) {
-    let height = 0;
-    const lineHeight = doc.currentLineHeight();
-    
-    for (const line of section) {
-        const trimmedLine = line.trim();
-        
-        if (trimmedLine === '') {
-            height += lineHeight * 0.5; // Empty line spacing
-        } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-            height += lineHeight * 1.5; // Section header with extra space
-        } else {
-            height += lineHeight;
-        }
-    }
-    
-    height += lineHeight; // Extra space after section
-    return height;
-}
-
-// Distribute sections with smart splitting always enabled
-function distributeIntoColumns(sections, doc, columnWidth) {
-    // Calculate available height from current Y position to bottom of page
-    const currentY = doc.y;
-    const bottomMargin = 80; // Leave room for footer
-    const availableHeight = doc.page.height - currentY - bottomMargin;
-    
-    // Calculate total height of all sections
-    const totalHeight = sections.reduce((sum, section) => {
-        return sum + estimateSectionHeight(section, doc, columnWidth);
-    }, 0);
-    
-    console.log(`📄 Page distribution: currentY=${currentY}, availableHeight=${availableHeight}, totalHeight=${totalHeight}`);
-    
-    // Always use smart distribution with splitting capability
-    console.log(`🧠 Using smart distribution with section splitting enabled`);
-    return distributeWithSmartSplitting(sections, doc, columnWidth, availableHeight);
-}
-
-// Unified smart distribution with intelligent section splitting
-function distributeWithSmartSplitting(sections, doc, columnWidth, availableHeight) {
-    let leftHeight = 0;
-    let rightHeight = 0;
-    const leftSections = [];
-    const rightSections = [];
-    
-    for (const section of sections) {
-        const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
-        const remainingLeftSpace = availableHeight - leftHeight;
-        const remainingRightSpace = availableHeight - rightHeight;
-        
-        console.log(`📐 Processing section: height=${sectionHeight}, leftSpace=${remainingLeftSpace}, rightSpace=${remainingRightSpace}`);
-        
-        // Try to fit in left column first
-        if (sectionHeight <= remainingLeftSpace) {
-            leftSections.push(section);
-            leftHeight += sectionHeight;
-            console.log(`📝 Whole section to LEFT: height=${sectionHeight}, leftTotal=${leftHeight}`);
-        }
-        // Try to fit in right column
-        else if (sectionHeight <= remainingRightSpace) {
-            rightSections.push(section);
-            rightHeight += sectionHeight;
-            console.log(`📝 Whole section to RIGHT: height=${sectionHeight}, rightTotal=${rightHeight}`);
-        }
-        // Section doesn't fit entirely anywhere - try smart splitting
-        else {
-            console.log(`🔄 Section too big for either column - attempting smart split`);
-            const splitResult = trySplitSection(section, doc, columnWidth, remainingLeftSpace, remainingRightSpace);
-            
-            if (splitResult.canSplit) {
-                // Add split parts to respective columns
-                if (splitResult.leftPart.length > 0) {
-                    leftSections.push(splitResult.leftPart);
-                    leftHeight += splitResult.leftHeight;
-                    console.log(`✂️ Section split - LEFT part: ${splitResult.leftPart.length} lines, height=${splitResult.leftHeight}`);
-                }
-                if (splitResult.rightPart.length > 0) {
-                    rightSections.push(splitResult.rightPart);
-                    rightHeight += splitResult.rightHeight;
-                    console.log(`✂️ Section split - RIGHT part: ${splitResult.rightPart.length} lines, height=${splitResult.rightHeight}`);
-                }
-            } else {
-                // Can't split - this will trigger a page break in rendering
-                console.log(`⚠️ Cannot split section intelligently - will need page break`);
-                // Put in right column as it's likely to have more space after left column content
-                rightSections.push(section);
-                rightHeight += sectionHeight;
+        // Add spacing after section blocks (when next line is a section header)
+        if (trimmedCurrent !== '' && trimmedNext !== '') {
+            if (trimmedNext.startsWith('[') && trimmedNext.endsWith(']')) {
+                // Next line is a new section header, add spacing
+                linesWithSpacing.push(''); // Add empty line for spacing
+                console.log(`📏 Added section spacing after: "${trimmedCurrent.substring(0, 30)}..."`);
             }
         }
     }
     
-    console.log(`📊 Final distribution: ${leftSections.length} left (${leftHeight}), ${rightSections.length} right (${rightHeight})`);
-    return { leftSections, rightSections };
+    console.log(`✨ Added section spacing: ${lines.length} → ${linesWithSpacing.length} lines`);
+    return linesWithSpacing;
 }
 
-// Smart section splitting - ensures at least 30% content in first column
-function trySplitSection(section, doc, columnWidth, leftSpace, rightSpace) {
-    const minLeftPercentage = 0.30; // At least 30% must stay in left column
-    const sectionLines = section.length;
-    const minLeftLines = Math.ceil(sectionLines * minLeftPercentage);
+// Microsoft Word style column rendering with smart chord-lyrics grouping
+function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnWidth) {
+    const pageHeight = doc.page.height;
+    const bottomMargin = 60; // Reduced from 100 to 60
+    const topMargin = 50;    // Reduced from 120 to 50
     
-    // Calculate height for minimum left portion (30%)
-    const minLeftPortion = section.slice(0, minLeftLines);
-    const minLeftHeight = estimateSectionHeight(minLeftPortion, doc, columnWidth);
+    let currentX = leftColumnX;
+    let currentY = doc.y;
+    let isRightColumn = false;
+    let pageStartY = currentY;
     
-    // If even 30% doesn't fit in left space, don't split
-    if (minLeftHeight > leftSpace) {
-        console.log(`� Can't split - even 30% (${minLeftLines} lines) too big for left space`);
-        return { canSplit: false };
-    }
+    console.log(`📰 Starting smart chord-lyrics rendering...`);
     
-    // Find optimal split point - as much as possible in left while staying within space
-    let bestSplitIndex = minLeftLines; // Start with minimum 30%
+    // Group lines into chord-lyrics pairs and standalone items
+    const groups = groupChordLyricsPairs(lines);
     
-    for (let i = minLeftLines + 1; i <= sectionLines; i++) {
-        const leftPortion = section.slice(0, i);
-        const leftHeight = estimateSectionHeight(leftPortion, doc, columnWidth);
+    for (let i = 0; i < groups.length; i++) {
+        const group = groups[i];
         
-        if (leftHeight <= leftSpace) {
-            bestSplitIndex = i; // This split point works
-        } else {
-            break; // Stop - this would exceed left space
+        // Calculate total height needed for this group
+        const groupHeight = calculateGroupHeight(doc, group, columnWidth);
+        
+        console.log(`📦 Group ${i}: type=${group.type}, lines=${group.lines.length}, height=${groupHeight.toFixed(1)}`);
+        
+        // Check if group fits in current column (with some extra buffer)
+        const wouldExceedPage = (currentY + groupHeight + 20) > (pageHeight - bottomMargin);
+        
+        // Special handling for section-blocks to prevent orphaned headers
+        if (group.type === 'section-block' && wouldExceedPage) {
+            // Check if we can fit at least the header + some content
+            const headerHeight = calculateGroupHeight(doc, { type: 'section', lines: [group.lines[0]] }, columnWidth);
+            const minContentLines = Math.min(3, group.lines.length - 1); // At least 3 lines of content or whatever is available
+            const minContentGroup = { type: 'section-content', lines: group.lines.slice(0, 1 + minContentLines) };
+            const minSectionHeight = calculateGroupHeight(doc, minContentGroup, columnWidth);
+            
+            // If header + minimum content fits, split the section
+            if ((currentY + minSectionHeight + 20) <= (pageHeight - bottomMargin)) {
+                console.log(`✂️ Splitting section to prevent orphaned header: keeping ${minContentLines} content lines`);
+                
+                // Render header + minimum content in current column
+                const partialGroup = { type: 'section-block', lines: group.lines.slice(0, 1 + minContentLines) };
+                currentY = renderGroup(doc, partialGroup, currentX, currentY, columnWidth);
+                
+                // Create remaining content for next column/page
+                if (group.lines.length > 1 + minContentLines) {
+                    const remainingLines = group.lines.slice(1 + minContentLines);
+                    const remainingGroup = { type: 'section-continuation', lines: remainingLines };
+                    
+                    // Move to next column/page for remaining content
+                    if (!isRightColumn) {
+                        currentX = rightColumnX;
+                        currentY = pageStartY;
+                        isRightColumn = true;
+                        
+                        if ((currentY + calculateGroupHeight(doc, remainingGroup, columnWidth)) > (pageHeight - bottomMargin)) {
+                            doc.addPage();
+                            currentX = leftColumnX;
+                            currentY = topMargin;
+                            pageStartY = currentY;
+                            isRightColumn = false;
+                        }
+                    } else {
+                        doc.addPage();
+                        currentX = leftColumnX;
+                        currentY = topMargin;
+                        pageStartY = currentY;
+                        isRightColumn = false;
+                    }
+                    
+                    currentY = renderGroup(doc, remainingGroup, currentX, currentY, columnWidth);
+                }
+                
+                doc.y = currentY;
+                continue; // Skip normal processing for this group
+            }
         }
+        
+        // Normal page break logic for non-section groups or when section can't be split
+        if (wouldExceedPage) {
+            if (!isRightColumn) {
+                // Move to right column
+                console.log(`🔄 Moving group ${i} to right column`);
+                currentX = rightColumnX;
+                currentY = pageStartY;
+                isRightColumn = true;
+                
+                // Check if it fits in right column
+                if ((currentY + groupHeight) > (pageHeight - bottomMargin)) {
+                    console.log(`📄 Group ${i} needs new page`);
+                    doc.addPage();
+                    currentX = leftColumnX;
+                    currentY = topMargin;
+                    pageStartY = currentY;
+                    isRightColumn = false;
+                }
+            } else {
+                // Need new page
+                console.log(`📄 Group ${i} needs new page`);
+                doc.addPage();
+                currentX = leftColumnX;
+                currentY = topMargin;
+                pageStartY = currentY;
+                isRightColumn = false;
+            }
+        }
+        
+        // Render the entire group together
+        currentY = renderGroup(doc, group, currentX, currentY, columnWidth);
+        doc.y = currentY;
     }
     
-    // Create the split
-    const leftPart = section.slice(0, bestSplitIndex);
-    const rightPart = section.slice(bestSplitIndex);
-    
-    const leftHeight = estimateSectionHeight(leftPart, doc, columnWidth);
-    const rightHeight = estimateSectionHeight(rightPart, doc, columnWidth);
-    
-    // Verify right part fits in right column
-    if (rightHeight > rightSpace) {
-        console.log(`🚫 Can't split - right part too big for right space`);
-        return { canSplit: false };
-    }
-    
-    console.log(`✅ Smart split: ${leftPart.length}/${rightPart.length} lines (${(leftPart.length/sectionLines*100).toFixed(1)}%/${(rightPart.length/sectionLines*100).toFixed(1)}%)`);
-    
-    return {
-        canSplit: true,
-        leftPart,
-        rightPart,
-        leftHeight,
-        rightHeight
-    };
+    console.log(`✅ Smart rendering complete. Final Y: ${currentY.toFixed(1)}`);
 }
 
-// Fallback: sequential distribution with overflow protection
-function distributeWithOverflow(sections, doc, columnWidth, availableHeight) {
-    let currentHeight = 0;
-    const leftSections = [];
-    const rightSections = [];
-    let useRightColumn = false;
+// Group lines into logical sections with headers staying with their content
+function groupChordLyricsPairs(lines) {
+    const groups = [];
+    let i = 0;
     
-    for (const section of sections) {
-        const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
+    while (i < lines.length) {
+        const currentLine = lines[i].trim();
         
-        // If this section would overflow the current column, switch to right column
-        if (!useRightColumn && currentHeight + sectionHeight > availableHeight) {
-            console.log(`🔄 Switching to right column - section too tall for left`);
-            useRightColumn = true;
-            currentHeight = 0; // Reset height for right column
+        // Section headers - collect header + following content as one group
+        if (currentLine.startsWith('[') && currentLine.endsWith(']')) {
+            const sectionGroup = {
+                type: 'section-block',
+                lines: [lines[i]], // Start with header
+                hasContent: false
+            };
+            
+            i++; // Move past header
+            
+            // Collect all content until next section or end
+            while (i < lines.length) {
+                const nextLine = lines[i].trim();
+                
+                // Stop if we hit another section header
+                if (nextLine.startsWith('[') && nextLine.endsWith(']')) {
+                    break;
+                }
+                
+                sectionGroup.lines.push(lines[i]);
+                
+                // Mark that this section has content (not just empty lines)
+                if (nextLine !== '') {
+                    sectionGroup.hasContent = true;
+                }
+                
+                i++;
+            }
+            
+            console.log(`📂 Section block: "${currentLine}" with ${sectionGroup.lines.length - 1} content lines`);
+            groups.push(sectionGroup);
         }
-        
-        // Add section to appropriate column in original order
-        if (useRightColumn) {
-            rightSections.push(section);
-        } else {
-            leftSections.push(section);
+        // Handle orphaned content (content without section header)
+        else {
+            // For content without a section header, use the old logic
+            if (currentLine === '') {
+                groups.push({
+                    type: 'empty',
+                    lines: [lines[i]]
+                });
+                i++;
+            }
+            // Chord line - check if next line is lyrics
+            else if (isChordLine(currentLine)) {
+                const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+                
+                if (nextLine && !nextLine.startsWith('[') && !nextLine.endsWith(']') && !isChordLine(nextLine)) {
+                    // Chord-lyrics pair
+                    groups.push({
+                        type: 'chord-lyrics',
+                        lines: [lines[i], lines[i + 1]]
+                    });
+                    i += 2; // Skip both lines
+                    console.log(`🎵 Orphaned chord-lyrics pair: "${currentLine}" + "${nextLine}"`);
+                } else {
+                    // Standalone chord
+                    groups.push({
+                        type: 'chord',
+                        lines: [lines[i]]
+                    });
+                    i++;
+                }
+            }
+            // Regular lyrics line
+            else {
+                groups.push({
+                    type: 'lyrics',
+                    lines: [lines[i]]
+                });
+                i++;
+            }
         }
-        
-        currentHeight += sectionHeight;
     }
     
-    console.log(`📊 Sequential distribution: ${leftSections.length} left sections, ${rightSections.length} right sections`);
-    return { leftSections, rightSections };
+    console.log(`📊 Created ${groups.length} groups from ${lines.length} lines`);
+    return groups;
 }
 
-// Render sections with minimal page breaks - let distribution handle the layout
-function renderSections(doc, sections, columnX, columnWidth) {
-    for (let i = 0; i < sections.length; i++) {
-        const section = sections[i];
-        
-        // Only add page break if section is truly massive and would break the page
-        const sectionHeight = estimateSectionHeight(section, doc, columnWidth);
-        const bottomMargin = 50; // Reduced margin for less aggressive breaks
-        
-        // Only break page for very large sections that absolutely won't fit
-        if (sectionHeight > 400 && doc.y + sectionHeight > doc.page.height - bottomMargin) {
-            console.log(`⚠️ Very large section ${i} needs page break (height: ${sectionHeight})`);
-            doc.addPage();
-        }
-        
-        // Add space before section (except first one and after page break)
-        if (i > 0 && doc.y > 100) { // 100 = roughly header area
-            doc.moveDown(1);
-        }
-        
-        for (const line of section) {
+// Calculate total height needed for a group
+function calculateGroupHeight(doc, group, columnWidth) {
+    let totalHeight = 0;
+    
+    // For section blocks and continuations, we need to be more careful about height calculation
+    if (group.type === 'section-block' || group.type === 'section-continuation') {
+        for (let i = 0; i < group.lines.length; i++) {
+            const line = group.lines[i];
             const trimmedLine = line.trim();
             
             if (trimmedLine === '') {
-                // Empty line - small space
-                doc.moveDown(0.3);
+                totalHeight += doc.currentLineHeight() * 0.5;
             } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
-                // Section headers - BOLD (as requested)
-                doc.font('Helvetica-Bold')
-                   .text(line, columnX, doc.y, { width: columnWidth });
-                doc.font('Helvetica');
-                doc.moveDown(0.2);
-            } else if (isChordLine(trimmedLine)) {
-                // Chord lines - BOLD (as requested)
-                doc.font('Helvetica-Bold')
-                   .text(line, columnX, doc.y, { width: columnWidth });
-                doc.font('Helvetica');
+                // Section header gets extra space (reduced padding)
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 4; // Reduced from 8 to 4
             } else {
-                // Lyrics - NORMAL font (as requested)
-                doc.font('Helvetica')
-                   .text(line, columnX, doc.y, { width: columnWidth });
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
             }
         }
+        
+        // Add some padding for section blocks (reduced)
+        totalHeight += 2; // Reduced from 5 to 2
+    } else if (group.type === 'section-content') {
+        // Special handling for partial section content (used in calculations)
+        for (let i = 0; i < group.lines.length; i++) {
+            const line = group.lines[i];
+            const trimmedLine = line.trim();
+            
+            if (trimmedLine === '') {
+                totalHeight += doc.currentLineHeight() * 0.5;
+            } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 4;
+            } else {
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 1;
+            }
+        }
+        totalHeight += 2;
+    } else {
+        // Original logic for other group types
+        for (const line of group.lines) {
+            const trimmedLine = line.trim();
+            
+            if (trimmedLine === '') {
+                totalHeight += doc.currentLineHeight() * 0.5;
+            } else {
+                const textHeight = doc.heightOfString(line, { width: columnWidth });
+                totalHeight += Math.max(textHeight, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
+            }
+        }
+        
+        // Add extra space for section headers (reduced)
+        if (group.type === 'section') {
+            totalHeight += 4; // Reduced from 8 to 4
+        }
+        
+        // Add small gap between chord-lyrics pairs
+        if (group.type === 'chord-lyrics') {
+            totalHeight += 1; // Reduced from 2 to 1
+        }
     }
+    
+    return totalHeight;
+}
+
+// Render a complete group (keeping related content together)
+function renderGroup(doc, group, x, startY, columnWidth) {
+    let currentY = startY;
+    
+    // Handle section blocks and section continuations specially
+    if (group.type === 'section-block' || group.type === 'section-continuation') {
+        console.log(`📋 Rendering ${group.type} with ${group.lines.length} lines`);
+        
+        for (let i = 0; i < group.lines.length; i++) {
+            const line = group.lines[i];
+            const trimmedLine = line.trim();
+            
+            doc.x = x;
+            doc.y = currentY;
+            
+            if (trimmedLine === '') {
+                currentY += doc.currentLineHeight() * 0.5;
+            } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+                // Section header - bold with extra space
+                console.log(`📌 Section header: "${trimmedLine}"`);
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 4; // Reduced from 8 to 4
+            } else if (isChordLine(trimmedLine)) {
+                // Chord line in section
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
+            } else {
+                // Lyrics line in section
+                doc.font('Helvetica');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
+            }
+        }
+        
+        // Add some space after section block (reduced)
+        currentY += 2; // Reduced from 5 to 2
+    } else {
+        // Original rendering for other group types
+        for (let i = 0; i < group.lines.length; i++) {
+            const line = group.lines[i];
+            const trimmedLine = line.trim();
+            
+            doc.x = x;
+            doc.y = currentY;
+            
+            if (trimmedLine === '') {
+                currentY += doc.currentLineHeight() * 0.5;
+            } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+                // Section header
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 4; // Reduced from 8 to 4
+            } else if (isChordLine(trimmedLine)) {
+                // Chord line
+                doc.font('Helvetica-Bold');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                doc.font('Helvetica');
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
+            } else {
+                // Lyrics line
+                doc.font('Helvetica');
+                const beforeY = currentY;
+                doc.text(line, x, currentY, { width: columnWidth });
+                const afterY = doc.y;
+                currentY = beforeY + Math.max(afterY - beforeY, doc.currentLineHeight()) + 1; // Reduced from 3 to 1
+            }
+        }
+        
+        // Add small gap after chord-lyrics pairs (reduced)
+        if (group.type === 'chord-lyrics') {
+            currentY += 1; // Reduced from 2 to 1
+        }
+    }
+    
+    return currentY;
 }
 
 // Check if a line contains chords - Simplified and more accurate
@@ -456,9 +521,5 @@ function isChordLine(line) {
 
 module.exports = {
     generatePDF,
-    groupLyricsIntoSections,
-    estimateSectionHeight,
-    distributeIntoColumns,
-    renderSections,
     isChordLine
 };
