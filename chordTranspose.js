@@ -19,11 +19,18 @@ function transposeChord(chord, steps) {
     let [_, root, suffix] = match;
     // Use sharp or flat based on input
     const useFlat = root.includes('b');
-    const base = useFlat ? CHORDS_FLAT : CHORDS_SHARP;
-    let idx = getChordIndex(root, useFlat);
+    const useSharp = root.includes('#');
+    let idxSharp = getChordIndex(root, false);
+    let idxFlat = getChordIndex(root, true);
+    let idx = useFlat ? idxFlat : idxSharp;
     if (idx === -1) return chord;
     let newIdx = (idx + steps + 12) % 12;
-    let newRoot = base[newIdx];
+    // Prefer natural notes if possible
+    let newRoot = CHORDS_SHARP[newIdx];
+    // If input was flat, use flat output unless result is natural
+    if (useFlat && !newRoot.includes('#')) newRoot = CHORDS_FLAT[newIdx];
+    // If input was sharp, use sharp output unless result is natural
+    if (useSharp && !newRoot.includes('b')) newRoot = CHORDS_SHARP[newIdx];
     return newRoot + suffix;
 }
 
