@@ -17,20 +17,25 @@ function transposeChord(chord, steps) {
     const match = chord.match(/^([A-G][b#]?)(.*)$/);
     if (!match) return chord;
     let [_, root, suffix] = match;
-    // Use sharp or flat based on input
-    const useFlat = root.includes('b');
-    const useSharp = root.includes('#');
     let idxSharp = getChordIndex(root, false);
     let idxFlat = getChordIndex(root, true);
-    let idx = useFlat ? idxFlat : idxSharp;
+    let idx = root.includes('b') ? idxFlat : idxSharp;
     if (idx === -1) return chord;
     let newIdx = (idx + steps + 12) % 12;
-    // Prefer natural notes if possible
-    let newRoot = CHORDS_SHARP[newIdx];
-    // If input was flat, use flat output unless result is natural
-    if (useFlat && !newRoot.includes('#')) newRoot = CHORDS_FLAT[newIdx];
-    // If input was sharp, use sharp output unless result is natural
-    if (useSharp && !newRoot.includes('b')) newRoot = CHORDS_SHARP[newIdx];
+    // Always prefer natural notes first
+    let sharp = CHORDS_SHARP[newIdx];
+    let flat = CHORDS_FLAT[newIdx];
+    let newRoot = sharp;
+    if (!sharp.includes('#') && !sharp.includes('b')) {
+        newRoot = sharp; // natural
+    } else if (root.includes('#')) {
+        newRoot = sharp; // prefer sharp
+    } else if (root.includes('b')) {
+        newRoot = flat; // prefer flat
+    } else {
+        // If input was natural, prefer sharp for sharp notes, flat for flat notes
+        newRoot = sharp.includes('#') ? sharp : flat;
+    }
     return newRoot + suffix;
 }
 
