@@ -128,7 +128,15 @@ function transposeChordLine(line, fromKey, toKey) {
     
     // Replace chords in line - improved regex for better chord detection
     return line.replace(/\b([A-G][b#]*)([mM]?(?:aj|in|sus[24]?|aug|dim|add)?[0-9]*(?:[b#][0-9]+)*(?:\/[A-G][b#]*)?)\b/g, (match) => {
-        return transposeChord(match, steps, toKey);
+        let result = transposeChord(match, steps, toKey);
+        // Extra safety: normalize any remaining double sharps/flats in the final result
+        result = result.replace(/([A-G])##/g, (m, note) => {
+            return normalizeEnharmonic(note + '##', toKey);
+        });
+        result = result.replace(/([A-G])bb/g, (m, note) => {
+            return normalizeEnharmonic(note + 'bb', toKey);
+        });
+        return result;
     });
 }
 
