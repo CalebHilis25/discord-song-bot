@@ -69,14 +69,16 @@ function transposeChord(chord, steps, targetKey = null) {
             bassIdx = CHORDS_FLAT.indexOf(normalizedBass);
             if (bassIdx !== -1) normalizedBass = CHORDS_SHARP[bassIdx];
         }
-        let transposedBass = normalizedBass;
-        if (bassIdx !== -1) {
-            let newBassIdx = (bassIdx + steps + 12) % 12;
-            transposedBass = CHORDS_SHARP[newBassIdx];
+        if (bassIdx !== -1 || CHORDS_SHARP.includes(normalizedBass)) {
+            let finalBassIdx = CHORDS_SHARP.indexOf(normalizedBass);
+            let newBassIdx = (finalBassIdx + steps + 12) % 12;
+            let transposedBass = CHORDS_SHARP[newBassIdx];
+            // Final normalization to ensure no double sharps/flats
+            transposedBass = normalizeEnharmonic(transposedBass, targetKey);
+            return `${transposedMain}/${transposedBass}${suffix}`;
         }
-        // Final normalization to ensure no double sharps/flats
-        transposedBass = normalizeEnharmonic(transposedBass, targetKey);
-        return `${transposedMain}/${transposedBass}${suffix}`;
+        // Fallback if bass note couldn't be processed
+        return `${transposedMain}/${normalizeEnharmonic(bassNote, targetKey)}${suffix}`;
     }
 
     // Extract root and suffix (e.g. G#m7)
