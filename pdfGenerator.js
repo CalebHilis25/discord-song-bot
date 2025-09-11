@@ -73,13 +73,6 @@ async function generatePDF(song) {
                    });
             });
 
-            // Footer for first page
-            doc.fontSize(8)
-               .font('Helvetica')
-               .text(footerText, leftColumnX, doc.page.height - 30, {
-                   width: pageWidth,
-                   align: 'center'
-               });
 
             // Flow text in columns like Microsoft Word with section spacing
             const allLines = song.lyrics || [];
