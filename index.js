@@ -5,6 +5,7 @@ const http = require('http');
 require('dotenv').config();
 
 const { generatePDF } = require('./pdfGenerator');
+const { generateGoogleDoc } = require('./googleDocsGenerator');
 const { ManualInputProcessor } = require('./manualInputProcessor');
 
 // Create Discord client
