@@ -253,8 +253,76 @@ client.on('messageCreate', async (message) => {
                 }
                 
                 // Clear user state
+                // Prompt for chord transposition
+                userState.step = 'waiting_for_transpose_key';
+                userStates.set(userId, userState);
+                await message.reply('🔄 Would you like to transpose the chords? If yes, reply with the target key (e.g., C, D, E, F, G, A, B). Or type "no" to skip.');
+                return;
+            }
+            else if (userState.step === 'waiting_for_transpose_key') {
+                const targetKey = input.trim().toUpperCase();
+                if (targetKey === 'NO' || targetKey === 'N') {
+                    await message.reply('✅ Transposition skipped. Enjoy your PDF!');
+                    userStates.delete(userId);
+                    return;
+                }
+                // Validate key
+                const validKeys = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','DB','EB','GB','AB','BB'];
+                if (!validKeys.includes(targetKey)) {
+                    await message.reply('❌ Invalid key. Please reply with a valid key (C, D, E, F, G, A, B, etc.) or "no" to skip.');
+                    return;
+                }
+                // Ask for original key
+                userState.step = 'waiting_for_original_key';
+                userState.targetKey = targetKey;
+                userStates.set(userId, userState);
+                await message.reply('🎼 What is the original key of the song? (e.g., C, D, E, F, G, A, B)');
+                return;
+            }
+            else if (userState.step === 'waiting_for_original_key') {
+                const fromKey = input.trim().toUpperCase();
+                const validKeys = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','DB','EB','GB','AB','BB'];
+                if (!validKeys.includes(fromKey)) {
+                    await message.reply('❌ Invalid key. Please reply with a valid key (C, D, E, F, G, A, B, etc.).');
+                    return;
+                }
+                // Transpose all chord lines
+                const { transposeChordLine } = require('./chordTranspose');
+                const transposedLyrics = userState.lyricsLines.map(line => {
+                    // Only transpose chord lines
+                    const { isChordLine } = require('./pdfGenerator');
+                    if (isChordLine(line)) {
+                        return transposeChordLine(line, fromKey, userState.targetKey);
+                    }
+                    return line;
+                });
+                // Generate transposed PDF
+                const transposedSong = {
+                    title: `${userState.songTitle} (Transposed to ${userState.targetKey})`,
+                    artist: userState.artistName,
+                    lyrics: transposedLyrics
+                };
+                const statusMsg = await message.reply(`🎼 Transposing chords from ${fromKey} to ${userState.targetKey}...`);
+                try {
+                    const pdfPath = await generatePDF(transposedSong);
+                    const attachment = new AttachmentBuilder(pdfPath, {
+                        name: `${transposedSong.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+                    });
+                    await message.reply({
+                        content: `🎵 **${transposedSong.title}** by **${transposedSong.artist}**\n📄 Here's your transposed PDF!`,
+                        files: [attachment]
+                    });
+                    await statusMsg.delete();
+                    setTimeout(() => {
+                        try { fs.unlinkSync(pdfPath); } catch (e) {}
+                    }, 5000);
+                } catch (error) {
+                    console.error('❌ Transposed PDF generation error:', error);
+                    await statusMsg.edit('❌ Error generating transposed PDF!');
+                }
                 userStates.delete(userId);
                 return;
+            }
             }
         }
         
