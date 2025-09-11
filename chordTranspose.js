@@ -40,4 +40,11 @@ function transposeChordLine(line, fromKey, toKey) {
     });
 }
 
-module.exports = { transposeChordLine };
+function transposeChordLineBySteps(line, steps) {
+    // Replace chords in line by a number of half steps
+    return line.replace(/([A-G][b#]?)(m|maj|min|sus|aug|dim|add|[0-9]*)?/g, (match) => {
+        return transposeChord(match, steps);
+    });
+}
+
+module.exports = { transposeChordLine, transposeChordLineBySteps };
