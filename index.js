@@ -323,7 +323,6 @@ client.on('messageCreate', async (message) => {
                 userStates.delete(userId);
                 return;
             }
-            }
         }
         
         // Initial lyrics processing - check if it looks like lyrics
