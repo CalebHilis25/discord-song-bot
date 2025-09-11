@@ -5,7 +5,6 @@ const http = require('http');
 require('dotenv').config();
 
 const { generatePDF } = require('./pdfGenerator');
-const { generateGoogleDoc } = require('./googleDocsGenerator');
 const { ManualInputProcessor } = require('./manualInputProcessor');
 
 // Create Discord client
@@ -19,6 +18,9 @@ const client = new Client({
 
 // Initialize processors
 const manualProcessor = new ManualInputProcessor();
+
+// User conversation state tracking
+const userStates = new Map();
 
 // Function to handle .txt file attachments
 async function handleTxtFile(message, attachment) {
@@ -41,32 +43,22 @@ async function handleTxtFile(message, attachment) {
             return;
         }
         
-        await statusMsg.edit('🎵 File contains lyrics! Processing...');
+        // Store file content and start conversation flow for title/artist
+        const userId = message.author.id;
+        const lyricsLines = fileContent.split('\n').filter(line => line.trim().length > 0);
         
-        // Process the lyrics
-        const song = await manualProcessor.processLyricsText(fileContent, statusMsg);
-        
-        if (!song) {
-            await statusMsg.edit('❌ Could not process lyrics from file. Please check the format.');
-            return;
-        }
-        
-        // Generate PDF
-        await statusMsg.edit('📄 Generating PDF...');
-        const pdfPath = await generatePDF(song);
-        
-        // Send PDF
-        const attachment_pdf = new AttachmentBuilder(pdfPath);
-        await message.reply({
-            content: `✅ **${song.title}** by **${song.artist}**\n📎 Processed from: ${attachment.name}`,
-            files: [attachment_pdf]
+        userStates.set(userId, {
+            step: 'waiting_for_title',
+            lyricsLines: lyricsLines,
+            songTitle: null,
+            artistName: null,
+            isFromFile: true,
+            fileName: attachment.name
         });
         
-        // Clean up
-        fs.unlinkSync(pdfPath);
-        await statusMsg.delete();
+        await statusMsg.edit(`✅ **Lyrics loaded from ${attachment.name}!** Found ${lyricsLines.length} lines.\n\n🎵 Please enter the **song title**:`);
         
-        console.log(`✅ Successfully processed .txt file: ${attachment.name}`);
+        console.log(`✅ Successfully loaded .txt file: ${attachment.name}`);
         
     } catch (error) {
         console.error('❌ Error processing .txt file:', error);
@@ -105,7 +97,7 @@ function downloadFileContent(url) {
 // Bot ready event
 client.once('ready', async () => {
     console.log(`✅ Bot ONLINE: ${client.user.tag}`);
-    console.log(`🎵 SINGLE INSTANCE - MANUAL LYRICS ONLY - v5.1.0`);
+    console.log(`🎵 SINGLE INSTANCE - MANUAL LYRICS ONLY - v5.2.0`);
     console.log(`📰 Microsoft Word-Style Columns`);
     console.log(`📎 .txt File Support Enabled`);
     console.log(`❌ NO URL PROCESSING`);
@@ -130,29 +122,48 @@ client.on('messageCreate', async (message) => {
         }
     }
     
+    // Cancel command - to cancel current conversation
+    if (input === '!cancel') {
+        const userId = message.author.id;
+        if (userStates.has(userId)) {
+            userStates.delete(userId);
+            await message.reply('✅ **Cancelled current song processing.** You can start over by pasting new lyrics!');
+        } else {
+            await message.reply('❌ **No active song processing to cancel.**');
+        }
+        return;
+    }
+
     // Help command
     if (input === '!help') {
         await message.reply({
             content: `🎵 **Song Bot v5.1.0** - Microsoft Word-Style Columns 🎵\n\n` +
+                    `✅ **HOW IT WORKS:**\n` +
+                    `1. Paste lyrics or upload .txt file\n` +
+                    `2. Bot will ask for song title\n` +
+                    `3. Bot will ask for artist name\n` +
+                    `4. Get your professional PDF!\n\n` +
+                    `📰 **FEATURES:**\n` +
+                    `• Word-Style Columns (left to right flow)\n` +
+                    `• Bold chords and section headers\n` +
+                    `• Custom title and artist on PDF\n` +
+                    `• 3 lines spacing between sections\n\n` +
                     `✅ **WORKS WITH:**\n` +
                     `• Pasted Lyrics: Full song with chords\n` +
                     `• .txt Files: Upload lyrics file\n\n` +
-                    `📰 **NEW: Word-Style Columns!**\n` +
-                    `Text flows naturally from left to right\n\n` +
                     `❌ **DOES NOT WORK:**\n` +
                     `• URLs (disabled for security)\n` +
-                    `• Song titles (like "Wonderwall")\n` +
+                    `• Song title searches\n` +
                     `• Artist searches\n` +
                     `• Any web searching\n\n` +
-                    `📄 **Output:** 2-column PDF with chords\n\n` +
-                    `💡 **Just paste lyrics or upload .txt file!**`
+                    `💡 **Just paste lyrics and follow the prompts!**`
         });
         return;
     }
 
     // Version check command
     if (input === '!version') {
-        await message.reply(`🤖 Bot Version: 5.1.0\n📰 Microsoft Word-Style Columns\n📎 .txt File Support\nTimestamp: ${new Date().toISOString()}`);
+        await message.reply(`🤖 Bot Version: 5.2.0\n📰 Microsoft Word-Style Columns\n📎 .txt File Support\n🎵 Custom Song Title & Artist Input\nTimestamp: ${new Date().toISOString()}`);
         return;
     }
 
@@ -191,6 +202,63 @@ client.on('messageCreate', async (message) => {
 
     // Main processing - LYRICS ONLY
     if (!input.startsWith('!') && input.length > 0) {
+        const userId = message.author.id;
+        const userState = userStates.get(userId);
+        
+        // Handle conversation flow for song info
+        if (userState) {
+            if (userState.step === 'waiting_for_title') {
+                userState.songTitle = input.trim();
+                userState.step = 'waiting_for_artist';
+                userStates.set(userId, userState);
+                
+                await message.reply(`✅ Song title: **"${userState.songTitle}"**\n\n🎤 Now please enter the **artist name**:`);
+                return;
+            }
+            else if (userState.step === 'waiting_for_artist') {
+                userState.artistName = input.trim();
+                userState.step = 'processing';
+                userStates.set(userId, userState);
+                
+                // Now process the lyrics with the provided title and artist
+                const statusMsg = await message.reply(`✅ Artist: **${userState.artistName}**\n\n📄 Generating PDF for **"${userState.songTitle}"** by **${userState.artistName}**...`);
+                
+                try {
+                    // Create custom song object with user-provided title and artist
+                    const customSong = {
+                        title: userState.songTitle,
+                        artist: userState.artistName,
+                        lyrics: userState.lyricsLines
+                    };
+                    
+                    const pdfPath = await generatePDF(customSong);
+                    const attachment = new AttachmentBuilder(pdfPath, {
+                        name: `${customSong.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+                    });
+                    
+                    await message.reply({
+                        content: `🎵 **${customSong.title}** by **${customSong.artist}**\n📄 Here's your PDF!`,
+                        files: [attachment]
+                    });
+                    
+                    await statusMsg.delete();
+                    
+                    setTimeout(() => {
+                        try { fs.unlinkSync(pdfPath); } catch (e) {}
+                    }, 5000);
+                    
+                } catch (error) {
+                    console.error('❌ PDF generation error:', error);
+                    await statusMsg.edit('❌ Error generating PDF!');
+                }
+                
+                // Clear user state
+                userStates.delete(userId);
+                return;
+            }
+        }
+        
+        // Initial lyrics processing - check if it looks like lyrics
         const statusMsg = await message.reply('🔄 Processing lyrics...');
         
         try {
@@ -210,41 +278,18 @@ client.on('messageCreate', async (message) => {
                 return;
             }
             
-            const song = await manualProcessor.processLyricsText(input, statusMsg);
+            // Lyrics look good - now ask for song title and artist
+            const lyricsLines = input.split('\n').filter(line => line.trim().length > 0);
             
-            if (song) {
-                await statusMsg.edit('📄 Generating PDF...');
-                
-                const pdfPath = await generatePDF(song);
-                const attachment = new AttachmentBuilder(pdfPath, {
-                    name: `${song.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
-                });
-                
-                await message.reply({
-                    content: `🎵 **${song.title}** by ${song.artist}\n📄 Here's your PDF!`,
-                    files: [attachment]
-                });
-                
-                await statusMsg.delete();
-                
-                setTimeout(() => {
-                    try { fs.unlinkSync(pdfPath); } catch (e) {}
-                }, 5000);
-                
-            } else {
-                await statusMsg.edit(
-                    `❌ **Can't process this input!**\n\n` +
-                    `✅ **Try:**\n` +
-                    `• Paste complete lyrics with chords\n` +
-                    `• Include verse/chorus structure\n` +
-                    `• Make sure it's actual song lyrics\n\n` +
-                    `❌ **Won't work:**\n` +
-                    `• URLs (disabled)\n` +
-                    `• Song titles like "Wonderwall"\n` +
-                    `• Artist names\n` +
-                    `• Short text snippets`
-                );
-            }
+            // Store lyrics and start conversation flow
+            userStates.set(userId, {
+                step: 'waiting_for_title',
+                lyricsLines: lyricsLines,
+                songTitle: null,
+                artistName: null
+            });
+            
+            await statusMsg.edit(`✅ **Lyrics received!** Found ${lyricsLines.length} lines.\n\n🎵 Please enter the **song title**:`);
             
         } catch (error) {
             console.error('❌ Processing error:', error);
