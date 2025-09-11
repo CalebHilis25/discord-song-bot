@@ -31,22 +31,36 @@ function normalizeEnharmonic(note, targetKey) {
     // Remove double sharps/flats
     note = note.replace('##', '');
     note = note.replace('bb', '');
-    // Map double accidentals to naturals
-    const doubleMap = {
-        'F#': 'G', 'C#': 'D', 'G#': 'A', 'D#': 'E', 'A#': 'B', 'E#': 'F', 'B#': 'C',
-        'Gb': 'F', 'Db': 'C', 'Ab': 'G', 'Eb': 'D', 'Bb': 'A', 'Cb': 'B', 'Fb': 'E'
+    // Map unnatural notes to correct enharmonic equivalents
+    const enharmonicMap = {
+        'E#': 'F', 'B#': 'C', 'Cb': 'B', 'Fb': 'E',
+        'Db': 'C#', 'Gb': 'F#', 'Ab': 'G#', 'Eb': 'D#', 'Bb': 'A#',
+        'C#': 'Db', 'F#': 'Gb', 'G#': 'Ab', 'D#': 'Eb', 'A#': 'Bb'
     };
-    if (doubleMap[note]) note = doubleMap[note];
-    // Always use sharps for accidentals unless original chord is flat
-    const idxSharp = CHORDS_SHARP.indexOf(note);
-    const idxFlat = CHORDS_FLAT.indexOf(note);
-    if (idxSharp !== -1 && note.includes('#')) {
-        note = CHORDS_SHARP[idxSharp];
-    } else if (idxFlat !== -1 && note.includes('b')) {
-        note = CHORDS_FLAT[idxFlat];
-    } else if (idxSharp !== -1 && idxFlat !== -1 && note.length > 1) {
-        // If accidental, prefer sharp
-        note = CHORDS_SHARP[idxSharp];
+    // Always prefer flats for accidentals unless original chord is sharp
+    if (enharmonicMap[note]) {
+        // For E# and B#, always use F and C
+        if (note === 'E#') return 'F';
+        if (note === 'B#') return 'C';
+        // For other accidentals, use flat equivalent
+        if (note.includes('#')) {
+            return enharmonicMap[note];
+        } else {
+            return note;
+        }
+    }
+    // If it's a natural note, keep as is
+    if (CHORDS_SHARP.includes(note) && !note.includes('#') && !note.includes('b')) {
+        return note;
+    }
+    // If it's a sharp, convert to flat
+    if (CHORDS_SHARP.includes(note) && note.includes('#')) {
+        let idx = CHORDS_SHARP.indexOf(note);
+        return CHORDS_FLAT[idx];
+    }
+    // If it's a flat, keep as is
+    if (CHORDS_FLAT.includes(note) && note.includes('b')) {
+        return note;
     }
     return note;
 }
@@ -78,19 +92,14 @@ function normalizeEnharmonic(note, targetKey) {
         // Natural note - always use it
         newRoot = sharp;
     } else {
-        // Accidental - choose based on context
-        if (targetKey && FLAT_KEYS.includes(targetKey)) {
-            newRoot = flat;
-        } else if (root.includes('b')) {
-            newRoot = flat;
-        } else if (root.includes('#')) {
+        // Accidental - prefer flats unless original chord is sharp
+        if (root.includes('#')) {
             newRoot = sharp;
         } else {
-            // For natural roots going to accidentals, avoid double sharps/flats
-            newRoot = sharp.length <= flat.length ? sharp : flat;
+            newRoot = flat;
         }
     }
-    // Normalize result
+    // Normalize result to musically correct enharmonic
     newRoot = normalizeEnharmonic(newRoot, targetKey);
     return newRoot + suffix;
 }
