@@ -143,23 +143,60 @@ function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnW
         // Calculate height needed for this line
         const lineHeight = doc.currentLineHeight();
         
-        // Check if this line will fit in current column
-        const willFitInCurrentColumn = (currentY + lineHeight) <= maxY;
-        
-        // If line won't fit and we're in left column, switch to right
-        if (!willFitInCurrentColumn && !isRightColumn) {
-            console.log(`🔄 Switching to right column at line ${i}: "${trimmedLine.substring(0, 30)}..."`);
-            currentX = rightColumnX;
-            currentY = startY;
-            isRightColumn = true;
+        // Special handling for section headers - keep them with their content
+        if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
+            // Look ahead to find at least 2-3 lines of content after this header
+            let contentLines = 0;
+            let totalSectionHeight = lineHeight; // Start with header height
+            
+            for (let j = i + 1; j < lines.length && contentLines < 3; j++) {
+                const nextLine = lines[j].trim();
+                if (nextLine === '') {
+                    totalSectionHeight += lineHeight * 0.6; // Empty line spacing
+                } else if (nextLine.startsWith('[') && nextLine.endsWith(']')) {
+                    break; // Hit another section header, stop looking
+                } else {
+                    totalSectionHeight += lineHeight;
+                    contentLines++;
+                }
+            }
+            
+            // Check if header + minimum content will fit in current column
+            const willFitWithContent = (currentY + totalSectionHeight) <= maxY;
+            
+            if (!willFitWithContent && !isRightColumn) {
+                console.log(`🔄 Moving section "${trimmedLine}" to right column (needs ${totalSectionHeight.toFixed(1)}px for header + content)`);
+                currentX = rightColumnX;
+                currentY = startY;
+                isRightColumn = true;
+            }
+            else if (!willFitWithContent && isRightColumn) {
+                console.log(`📄 Moving section "${trimmedLine}" to new page (needs ${totalSectionHeight.toFixed(1)}px for header + content)`);
+                doc.addPage();
+                currentX = leftColumnX;
+                currentY = doc.y;
+                isRightColumn = false;
+            }
         }
-        // If line won't fit and we're in right column, new page
-        else if (!willFitInCurrentColumn && isRightColumn) {
-            console.log(`📄 New page needed at line ${i}`);
-            doc.addPage();
-            currentX = leftColumnX;
-            currentY = doc.y;
-            isRightColumn = false;
+        // Normal line handling - check if this line will fit in current column
+        else {
+            const willFitInCurrentColumn = (currentY + lineHeight) <= maxY;
+            
+            // If line won't fit and we're in left column, switch to right
+            if (!willFitInCurrentColumn && !isRightColumn) {
+                console.log(`🔄 Switching to right column at line ${i}: "${trimmedLine.substring(0, 30)}..."`);
+                currentX = rightColumnX;
+                currentY = startY;
+                isRightColumn = true;
+            }
+            // If line won't fit and we're in right column, new page
+            else if (!willFitInCurrentColumn && isRightColumn) {
+                console.log(`📄 New page needed at line ${i}`);
+                doc.addPage();
+                currentX = leftColumnX;
+                currentY = doc.y;
+                isRightColumn = false;
+            }
         }
         
         // Set position and render the line
