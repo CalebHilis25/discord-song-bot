@@ -154,7 +154,7 @@ function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnW
             for (let j = i + 1; j < lines.length && contentLines < 3; j++) {
                 const nextLine = lines[j].trim();
                 if (nextLine === '') {
-                    totalSectionHeight += lineHeight * 0.6; // Empty line spacing
+                    totalSectionHeight += lineHeight * 1.2; // Updated to match rendering spacing
                 } else if (nextLine.startsWith('[') && nextLine.endsWith(']')) {
                     break; // Hit another section header, stop looking
                 } else {
@@ -206,8 +206,8 @@ function renderInWordStyleColumns(doc, lines, leftColumnX, rightColumnX, columnW
         doc.y = currentY;
         
         if (trimmedLine === '') {
-            // Empty line - spacing (from section spacing feature)
-            currentY += lineHeight * 0.6;
+            // Empty line - spacing (from section spacing feature) - make it more visible
+            currentY += lineHeight * 1.2; // Increased from 0.6 to 1.2 for better visibility
             console.log(`📏 Empty line spacing at y=${currentY.toFixed(1)}`);
         } else if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) {
             // Section headers - BOLD
