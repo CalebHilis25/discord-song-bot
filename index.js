@@ -104,11 +104,12 @@ function downloadFileContent(url) {
 // Bot ready event
 client.once('ready', async () => {
     console.log(`✅ Bot ONLINE: ${client.user.tag}`);
-    console.log(`🎵 SINGLE INSTANCE - MANUAL LYRICS ONLY - v5.0.0`);
-    console.log(`� LYRICS PASTING ONLY`);
+    console.log(`🎵 SINGLE INSTANCE - MANUAL LYRICS ONLY - v5.1.0`);
+    console.log(`📰 Microsoft Word-Style Columns`);
+    console.log(`📎 .txt File Support Enabled`);
     console.log(`❌ NO URL PROCESSING`);
     console.log(`❌ NO WEB SEARCH FUNCTIONALITY`);
-    console.log(`🚫 LOCAL BOT STOPPED - RAILWAY ONLY`);
+    console.log(`� RAILWAY DEPLOYMENT ACTIVE`);
 });
 
 // Message handler
@@ -131,10 +132,12 @@ client.on('messageCreate', async (message) => {
     // Help command
     if (input === '!help') {
         await message.reply({
-            content: `🎵 **Song Bot v5.0.0** - Manual Lyrics Only 🎵\n\n` +
+            content: `🎵 **Song Bot v5.1.0** - Microsoft Word-Style Columns 🎵\n\n` +
                     `✅ **WORKS WITH:**\n` +
                     `• Pasted Lyrics: Full song with chords\n` +
                     `• .txt Files: Upload lyrics file\n\n` +
+                    `📰 **NEW: Word-Style Columns!**\n` +
+                    `Text flows naturally from left to right\n\n` +
                     `❌ **DOES NOT WORK:**\n` +
                     `• URLs (disabled for security)\n` +
                     `• Song titles (like "Wonderwall")\n` +
@@ -148,7 +151,7 @@ client.on('messageCreate', async (message) => {
 
     // Version check command
     if (input === '!version') {
-        await message.reply(`🤖 Bot Version: 5.0.0\nMode: Manual Lyrics Only\nTimestamp: ${new Date().toISOString()}`);
+        await message.reply(`🤖 Bot Version: 5.1.0\n📰 Microsoft Word-Style Columns\n📎 .txt File Support\nTimestamp: ${new Date().toISOString()}`);
         return;
     }
 
