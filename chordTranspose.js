@@ -57,17 +57,28 @@ function normalizeEnharmonic(note, targetKey) {
 }
 
 function transposeChord(chord, steps, targetKey = null) {
-    // Handle slash chords (e.g., C/E)
-    const slashMatch = chord.match(/^([A-G][b#]*[^/]*?)\/([A-G][b#]+)(.*)$/);
+    // Handle slash chords (e.g., C/E, Am/G, F#/D#)
+    const slashMatch = chord.match(/^([A-G][b#]*.*?)\/([A-G][b#]*)(.*)$/);
     if (slashMatch) {
         const [_, mainChord, bassNote, suffix] = slashMatch;
         const transposedMain = transposeChord(mainChord, steps, targetKey);
         
-        // First normalize the original bass note, then transpose it
+        // Handle bass note: normalize first, then transpose
         let normalizedBass = normalizeEnharmonic(bassNote, targetKey);
-        let transposedBass = transposeChord(normalizedBass, steps, targetKey);
         
-        return `${transposedMain}/${transposedBass}${suffix}`;
+        // Get bass note index and transpose
+        let bassIdx = getChordIndex(normalizedBass, false);
+        if (bassIdx === -1) bassIdx = getChordIndex(normalizedBass, true);
+        
+        if (bassIdx !== -1) {
+            let newBassIdx = (bassIdx + steps + 12) % 12;
+            let transposedBass = CHORDS_SHARP[newBassIdx];
+            transposedBass = normalizeEnharmonic(transposedBass, targetKey);
+            return `${transposedMain}/${transposedBass}${suffix}`;
+        }
+        
+        // Fallback if bass note couldn't be processed
+        return `${transposedMain}/${bassNote}${suffix}`;
     }
 
     // Extract root and suffix (e.g. G#m7)
