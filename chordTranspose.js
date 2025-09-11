@@ -37,6 +37,25 @@ function normalizeEnharmonic(note, targetKey) {
         'Cbb': 'Bb', 'Dbb': 'C', 'Ebb': 'D', 'Fbb': 'D#', 'Gbb': 'F', 'Abb': 'G', 'Bbb': 'A'
     };
     if (doubleSharpMap[note]) return doubleSharpMap[note];
+    // If any remaining double sharp, convert to single sharp
+    if (/^[A-G]##$/.test(note)) {
+        const base = note[0];
+        // Find the index of the base note in CHORDS_SHARP
+        let idx = CHORDS_SHARP.indexOf(base);
+        if (idx !== -1) {
+            idx = (idx + 2) % 12;
+            return CHORDS_SHARP[idx];
+        }
+    }
+    // If any remaining double flat, convert to single flat
+    if (/^[A-G]bb$/.test(note)) {
+        const base = note[0];
+        let idx = CHORDS_SHARP.indexOf(base);
+        if (idx !== -1) {
+            idx = (idx + 10) % 12;
+            return CHORDS_SHARP[idx];
+        }
+    }
     // Map unnatural notes to correct enharmonic equivalents
     const enharmonicMap = {
         'E#': 'F', 'B#': 'C', 'Cb': 'B', 'Fb': 'E'
