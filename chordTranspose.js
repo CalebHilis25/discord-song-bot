@@ -23,18 +23,32 @@ function transposeChord(chord, steps, targetKey = null) {
         const transposedMain = transposeChord(mainChord, steps, targetKey);
         let transposedBass = transposeChord(bassNote, steps, targetKey);
         // Normalize double sharps/flats in bass note
-        transposedBass = transposedBass.replace('##', '');
-        transposedBass = transposedBass.replace('bb', '');
-        // If result is F#, G#, etc., prefer natural if possible
-        if (transposedBass === 'F#') transposedBass = 'G';
-        if (transposedBass === 'C#') transposedBass = 'D';
-        if (transposedBass === 'G#') transposedBass = 'A';
-        if (transposedBass === 'D#') transposedBass = 'E';
-        if (transposedBass === 'A#') transposedBass = 'B';
-        if (transposedBass === 'E#') transposedBass = 'F';
-        if (transposedBass === 'B#') transposedBass = 'C';
+        transposedBass = normalizeEnharmonic(transposedBass, targetKey);
         return `${transposedMain}/${transposedBass}${suffix}`;
     }
+// Normalize double sharps/flats and choose correct enharmonic equivalent
+function normalizeEnharmonic(note, targetKey) {
+    // Remove double sharps/flats
+    note = note.replace('##', '');
+    note = note.replace('bb', '');
+    // Map double accidentals to naturals
+    const doubleMap = {
+        'F#': 'G', 'C#': 'D', 'G#': 'A', 'D#': 'E', 'A#': 'B', 'E#': 'F', 'B#': 'C',
+        'Gb': 'F', 'Db': 'C', 'Ab': 'G', 'Eb': 'D', 'Bb': 'A', 'Cb': 'B', 'Fb': 'E'
+    };
+    if (doubleMap[note]) note = doubleMap[note];
+    // Use flats for flat keys, sharps for sharp keys
+    if (targetKey && FLAT_KEYS.includes(targetKey)) {
+        // Convert sharp to flat if possible
+        const idx = CHORDS_SHARP.indexOf(note);
+        if (idx !== -1) note = CHORDS_FLAT[idx];
+    } else {
+        // Convert flat to sharp if possible
+        const idx = CHORDS_FLAT.indexOf(note);
+        if (idx !== -1) note = CHORDS_SHARP[idx];
+    }
+    return note;
+}
 
     // Extract root and suffix (e.g. G#m7)
     const match = chord.match(/^([A-G][b#]?)(.*)$/);
@@ -75,7 +89,8 @@ function transposeChord(chord, steps, targetKey = null) {
             newRoot = sharp.length <= flat.length ? sharp : flat;
         }
     }
-    
+    // Normalize result
+    newRoot = normalizeEnharmonic(newRoot, targetKey);
     return newRoot + suffix;
 }
 
