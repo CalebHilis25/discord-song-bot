@@ -24,6 +24,14 @@ function transposeChord(chord, steps, targetKey = null) {
         let transposedBass = transposeChord(bassNote, steps, targetKey);
         // Always normalize bass note to standard chord spelling
         transposedBass = normalizeEnharmonic(transposedBass, targetKey);
+        // If transposedBass is still not standard, force to sharp
+        if (!CHORDS_SHARP.includes(transposedBass)) {
+            // Try to convert to sharp
+            let idx = CHORDS_FLAT.indexOf(transposedBass);
+            if (idx !== -1) transposedBass = CHORDS_SHARP[idx];
+            // If still not standard, default to 'C'
+            if (!CHORDS_SHARP.includes(transposedBass)) transposedBass = 'C';
+        }
         return `${transposedMain}/${transposedBass}${suffix}`;
     }
 // Normalize double sharps/flats and non-standard chord names to standard chord names
