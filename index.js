@@ -266,30 +266,26 @@ client.on('messageCreate', async (message) => {
                     userStates.delete(userId);
                     return;
                 }
-                // Half step up/down
+                // Chromatic half step up/down (always use chromatic logic)
                 if (option === '+1' || option === '-1') {
                     const steps = option === '+1' ? 1 : -1;
                     const { transposeChordLineBySteps } = require('./chordTranspose');
                     const transposedLyrics = userState.lyricsLines.map(line => {
-                        const { isChordLine } = require('./pdfGenerator');
-                        if (isChordLine(line)) {
-                            return transposeChordLineBySteps(line, steps);
-                        }
-                        return line;
+                        return transposeChordLineBySteps(line, steps);
                     });
                     const transposedSong = {
-                               title: userState.songTitle,
+                        title: userState.songTitle,
                         artist: userState.artistName,
                         lyrics: transposedLyrics
                     };
-                    const statusMsg = await message.reply(`🎼 Transposing chords ${steps > 0 ? 'up' : 'down'} by a half step...`);
+                    const statusMsg = await message.reply(`🎼 Chromatic transposition ${steps > 0 ? 'up' : 'down'} by a half step...`);
                     try {
                         const pdfPath = await generatePDF(transposedSong);
                         const attachment = new AttachmentBuilder(pdfPath, {
                             name: `${transposedSong.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
                         });
                         await message.reply({
-                            content: `🎵 **${transposedSong.title}** by **${transposedSong.artist}**\n📄 Here's your transposed PDF!`,
+                            content: `🎵 **${transposedSong.title}** by **${transposedSong.artist}**\n📄 Here's your chromatically transposed PDF!`,
                             files: [attachment]
                         });
                         await statusMsg.delete();
