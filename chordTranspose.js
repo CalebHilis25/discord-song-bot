@@ -21,7 +21,18 @@ function transposeChord(chord, steps, targetKey = null) {
     if (slashMatch) {
         const [_, mainChord, bassNote, suffix] = slashMatch;
         const transposedMain = transposeChord(mainChord, steps, targetKey);
-        const transposedBass = transposeChord(bassNote, steps, targetKey);
+        let transposedBass = transposeChord(bassNote, steps, targetKey);
+        // Normalize double sharps/flats in bass note
+        transposedBass = transposedBass.replace('##', '');
+        transposedBass = transposedBass.replace('bb', '');
+        // If result is F#, G#, etc., prefer natural if possible
+        if (transposedBass === 'F#') transposedBass = 'G';
+        if (transposedBass === 'C#') transposedBass = 'D';
+        if (transposedBass === 'G#') transposedBass = 'A';
+        if (transposedBass === 'D#') transposedBass = 'E';
+        if (transposedBass === 'A#') transposedBass = 'B';
+        if (transposedBass === 'E#') transposedBass = 'F';
+        if (transposedBass === 'B#') transposedBass = 'C';
         return `${transposedMain}/${transposedBass}${suffix}`;
     }
 
