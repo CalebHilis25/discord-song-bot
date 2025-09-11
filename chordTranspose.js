@@ -75,10 +75,24 @@ function transposeChord(chord, steps, targetKey = null) {
             let transposedBass = CHORDS_SHARP[newBassIdx];
             // Final normalization to ensure no double sharps/flats
             transposedBass = normalizeEnharmonic(transposedBass, targetKey);
+            // Extra cleanup: replace any remaining double sharps/flats
+            transposedBass = transposedBass.replace(/([A-G])##/g, (fullMatch, note) => {
+                return normalizeEnharmonic(note + '##', targetKey);
+            });
+            transposedBass = transposedBass.replace(/([A-G])bb/g, (fullMatch, note) => {
+                return normalizeEnharmonic(note + 'bb', targetKey);
+            });
             return `${transposedMain}/${transposedBass}${suffix}`;
         }
         // Fallback if bass note couldn't be processed
-        return `${transposedMain}/${normalizeEnharmonic(bassNote, targetKey)}${suffix}`;
+        let cleanedBass = normalizeEnharmonic(bassNote, targetKey);
+        cleanedBass = cleanedBass.replace(/([A-G])##/g, (fullMatch, note) => {
+            return normalizeEnharmonic(note + '##', targetKey);
+        });
+        cleanedBass = cleanedBass.replace(/([A-G])bb/g, (fullMatch, note) => {
+            return normalizeEnharmonic(note + 'bb', targetKey);
+        });
+        return `${transposedMain}/${cleanedBass}${suffix}`;
     }
 
     // Extract root and suffix (e.g. G#m7)
