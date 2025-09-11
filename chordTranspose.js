@@ -58,12 +58,15 @@ function normalizeEnharmonic(note, targetKey) {
 
 function transposeChord(chord, steps, targetKey = null) {
     // Handle slash chords (e.g., C/E)
-    const slashMatch = chord.match(/^([A-G][b#]*[^/]*?)\/([A-G][b#]*)(.*)$/);
+    const slashMatch = chord.match(/^([A-G][b#]*[^/]*?)\/([A-G][b#]+)(.*)$/);
     if (slashMatch) {
         const [_, mainChord, bassNote, suffix] = slashMatch;
         const transposedMain = transposeChord(mainChord, steps, targetKey);
-        let transposedBass = transposeChord(bassNote, steps, targetKey);
-        transposedBass = normalizeEnharmonic(transposedBass, targetKey);
+        
+        // First normalize the original bass note, then transpose it
+        let normalizedBass = normalizeEnharmonic(bassNote, targetKey);
+        let transposedBass = transposeChord(normalizedBass, steps, targetKey);
+        
         return `${transposedMain}/${transposedBass}${suffix}`;
     }
 
