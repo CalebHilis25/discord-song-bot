@@ -11,13 +11,23 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["discord", "bot", "music", "lyrics", "chords", "pdf", "manual-input", "url-processing"],
+  "keywords": [
+    "discord",
+    "bot",
+    "music",
+    "lyrics",
+    "chords",
+    "pdf",
+    "manual-input",
+    "url-processing"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
-    "pdfkit": "^0.14.0",
-    "fs": "^0.0.1-security"
+    "fs": "^0.0.1-security",
+    "pdf-lib": "^1.17.1",
+    "pdfkit": "^0.14.0"
   }
 }
