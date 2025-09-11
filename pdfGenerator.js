@@ -113,9 +113,11 @@ function addSectionSpacing(lines) {
         // Add spacing after section blocks (when next line is a section header)
         if (trimmedCurrent !== '' && trimmedNext !== '') {
             if (trimmedNext.startsWith('[') && trimmedNext.endsWith(']')) {
-                // Next line is a new section header, add spacing
-                linesWithSpacing.push(''); // Add empty line for spacing
-                console.log(`📏 Added section spacing after: "${trimmedCurrent.substring(0, 30)}..."`);
+                // Next line is a new section header, add 3 empty lines for more spacing
+                linesWithSpacing.push(''); // Empty line 1
+                linesWithSpacing.push(''); // Empty line 2
+                linesWithSpacing.push(''); // Empty line 3
+                console.log(`📏 Added 3 lines of section spacing after: "${trimmedCurrent.substring(0, 30)}..."`);
             }
         }
     }
