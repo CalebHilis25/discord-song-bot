@@ -63,17 +63,21 @@ function transposeChord(chord, steps, targetKey = null) {
         const [_, mainChord, bassNote, suffix] = slashMatch;
         const transposedMain = transposeChord(mainChord, steps, targetKey);
         
-        // Handle bass note: normalize first, then transpose
+        // Handle bass note: normalize first, then get clean index and transpose
         let normalizedBass = normalizeEnharmonic(bassNote, targetKey);
         
-        // Get bass note index and transpose
-        let bassIdx = getChordIndex(normalizedBass, false);
-        if (bassIdx === -1) bassIdx = getChordIndex(normalizedBass, true);
+        // Get bass note index and transpose manually
+        let bassIdx = CHORDS_SHARP.indexOf(normalizedBass);
+        if (bassIdx === -1) {
+            bassIdx = CHORDS_FLAT.indexOf(normalizedBass);
+            if (bassIdx !== -1) normalizedBass = CHORDS_SHARP[bassIdx];
+        }
         
-        if (bassIdx !== -1) {
-            let newBassIdx = (bassIdx + steps + 12) % 12;
+        if (bassIdx !== -1 || CHORDS_SHARP.includes(normalizedBass)) {
+            let finalBassIdx = CHORDS_SHARP.indexOf(normalizedBass);
+            let newBassIdx = (finalBassIdx + steps + 12) % 12;
             let transposedBass = CHORDS_SHARP[newBassIdx];
-            transposedBass = normalizeEnharmonic(transposedBass, targetKey);
+            
             return `${transposedMain}/${transposedBass}${suffix}`;
         }
         
