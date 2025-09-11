@@ -33,34 +33,24 @@ function normalizeEnharmonic(note, targetKey) {
     note = note.replace('bb', '');
     // Map unnatural notes to correct enharmonic equivalents
     const enharmonicMap = {
-        'E#': 'F', 'B#': 'C', 'Cb': 'B', 'Fb': 'E',
-        'Db': 'C#', 'Gb': 'F#', 'Ab': 'G#', 'Eb': 'D#', 'Bb': 'A#',
-        'C#': 'Db', 'F#': 'Gb', 'G#': 'Ab', 'D#': 'Eb', 'A#': 'Bb'
+        'E#': 'F', 'B#': 'C', 'Cb': 'B', 'Fb': 'E'
     };
-    // Always prefer flats for accidentals unless original chord is sharp
+    // Always use sharps for accidentals
     if (enharmonicMap[note]) {
-        // For E# and B#, always use F and C
-        if (note === 'E#') return 'F';
-        if (note === 'B#') return 'C';
-        // For other accidentals, use flat equivalent
-        if (note.includes('#')) {
-            return enharmonicMap[note];
-        } else {
-            return note;
-        }
+        return enharmonicMap[note];
     }
     // If it's a natural note, keep as is
     if (CHORDS_SHARP.includes(note) && !note.includes('#') && !note.includes('b')) {
         return note;
     }
-    // If it's a sharp, convert to flat
+    // If it's a sharp, keep as is
     if (CHORDS_SHARP.includes(note) && note.includes('#')) {
-        let idx = CHORDS_SHARP.indexOf(note);
-        return CHORDS_FLAT[idx];
-    }
-    // If it's a flat, keep as is
-    if (CHORDS_FLAT.includes(note) && note.includes('b')) {
         return note;
+    }
+    // If it's a flat, convert to sharp
+    if (CHORDS_FLAT.includes(note) && note.includes('b')) {
+        let idx = CHORDS_FLAT.indexOf(note);
+        return CHORDS_SHARP[idx];
     }
     return note;
 }
@@ -92,12 +82,8 @@ function normalizeEnharmonic(note, targetKey) {
         // Natural note - always use it
         newRoot = sharp;
     } else {
-        // Accidental - prefer flats unless original chord is sharp
-        if (root.includes('#')) {
-            newRoot = sharp;
-        } else {
-            newRoot = flat;
-        }
+        // Accidental - always use sharp
+        newRoot = sharp;
     }
     // Normalize result to musically correct enharmonic
     newRoot = normalizeEnharmonic(newRoot, targetKey);
