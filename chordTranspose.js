@@ -90,10 +90,16 @@ function transposeChord(chord, steps, targetKey = null) {
     
     let [_, root, suffix] = match;
     
-    // Get index from both sharp and flat arrays
-    let idx = getChordIndex(root, false);
-    if (idx === -1) {
-        idx = getChordIndex(root, true);
+    // Get index - try sharp array first, then flat array
+    let idx = -1;
+    let isOriginalFlat = root.includes('b');
+    
+    if (isOriginalFlat) {
+        idx = getChordIndex(root, true); // Try flat first for flat notes
+        if (idx === -1) idx = getChordIndex(root, false);
+    } else {
+        idx = getChordIndex(root, false); // Try sharp first for sharp/natural notes
+        if (idx === -1) idx = getChordIndex(root, true);
     }
     
     if (idx === -1) return chord;
@@ -101,18 +107,21 @@ function transposeChord(chord, steps, targetKey = null) {
     // Calculate new index
     let newIdx = (idx + steps + 12) % 12;
     
-    // Get the new root note with best enharmonic spelling
+    // Get both possible new notes
     let newRootSharp = CHORDS_SHARP[newIdx];
     let newRootFlat = CHORDS_FLAT[newIdx];
     
-    // Choose best enharmonic based on context
-    let newRoot = getBestEnharmonic(
-        root.includes('b') ? newRootFlat : newRootSharp,
-        targetKey,
-        root
-    );
+    // Choose the best enharmonic
+    let bestNote = newRootSharp;
+    if (newRootSharp !== newRootFlat) {
+        bestNote = getBestEnharmonic(
+            isOriginalFlat ? newRootFlat : newRootSharp,
+            targetKey,
+            root
+        );
+    }
     
-    return newRoot + suffix;
+    return bestNote + suffix;
 }
 
 function transposeChordLine(line, fromKey, toKey) {
