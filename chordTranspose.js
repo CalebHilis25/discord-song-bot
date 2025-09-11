@@ -22,7 +22,7 @@ function transposeChord(chord, steps, targetKey = null) {
         const [_, mainChord, bassNote, suffix] = slashMatch;
         const transposedMain = transposeChord(mainChord, steps, targetKey);
         let transposedBass = transposeChord(bassNote, steps, targetKey);
-        // Normalize double sharps/flats in bass note
+        // Always normalize bass note to standard chord spelling
         transposedBass = normalizeEnharmonic(transposedBass, targetKey);
         return `${transposedMain}/${transposedBass}${suffix}`;
     }
