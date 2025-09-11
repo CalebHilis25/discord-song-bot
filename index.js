@@ -260,15 +260,15 @@ client.on('messageCreate', async (message) => {
                 return;
             }
             else if (userState.step === 'waiting_for_transpose_option') {
-                const normalized = input.trim().replace(/\s+/g, '').toLowerCase();
-                if (normalized === 'no' || normalized === 'n') {
+                const option = input.trim().toUpperCase();
+                if (option === 'NO' || option === 'N') {
                     await message.reply('✅ Transposition skipped. Enjoy your PDF!');
                     userStates.delete(userId);
                     return;
                 }
-                // Half step up/down (accept any input containing '+1' or '-1')
-                if (normalized.includes('+1') || normalized.includes('plus1')) {
-                    const steps = 1;
+                // Half step up/down
+                if (option === '+1' || option === '-1') {
+                    const steps = option === '+1' ? 1 : -1;
                     const { transposeChordLineBySteps } = require('./chordTranspose');
                     const transposedLyrics = userState.lyricsLines.map(line => {
                         const { isChordLine } = require('./pdfGenerator');
@@ -278,47 +278,11 @@ client.on('messageCreate', async (message) => {
                         return line;
                     });
                     const transposedSong = {
-                        title: userState.songTitle,
+                               title: userState.songTitle,
                         artist: userState.artistName,
                         lyrics: transposedLyrics
                     };
-                    const statusMsg = await message.reply(`🎼 Transposing chords up by a half step...`);
-                    try {
-                        const pdfPath = await generatePDF(transposedSong);
-                        const attachment = new AttachmentBuilder(pdfPath, {
-                            name: `${transposedSong.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
-                        });
-                        await message.reply({
-                            content: `🎵 **${transposedSong.title}** by **${transposedSong.artist}**\n📄 Here's your transposed PDF!`,
-                            files: [attachment]
-                        });
-                        await statusMsg.delete();
-                        setTimeout(() => {
-                            try { fs.unlinkSync(pdfPath); } catch (e) {}
-                        }, 5000);
-                    } catch (error) {
-                        console.error('❌ Transposed PDF generation error:', error);
-                        await statusMsg.edit('❌ Error generating transposed PDF!');
-                    }
-                    userStates.delete(userId);
-                    return;
-                }
-                if (normalized.includes('-1') || normalized.includes('minus1')) {
-                    const steps = -1;
-                    const { transposeChordLineBySteps } = require('./chordTranspose');
-                    const transposedLyrics = userState.lyricsLines.map(line => {
-                        const { isChordLine } = require('./pdfGenerator');
-                        if (isChordLine(line)) {
-                            return transposeChordLineBySteps(line, steps);
-                        }
-                        return line;
-                    });
-                    const transposedSong = {
-                        title: userState.songTitle,
-                        artist: userState.artistName,
-                        lyrics: transposedLyrics
-                    };
-                    const statusMsg = await message.reply(`🎼 Transposing chords down by a half step...`);
+                    const statusMsg = await message.reply(`🎼 Transposing chords ${steps > 0 ? 'up' : 'down'} by a half step...`);
                     try {
                         const pdfPath = await generatePDF(transposedSong);
                         const attachment = new AttachmentBuilder(pdfPath, {
