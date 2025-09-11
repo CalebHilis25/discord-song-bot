@@ -37,15 +37,16 @@ function normalizeEnharmonic(note, targetKey) {
         'Gb': 'F', 'Db': 'C', 'Ab': 'G', 'Eb': 'D', 'Bb': 'A', 'Cb': 'B', 'Fb': 'E'
     };
     if (doubleMap[note]) note = doubleMap[note];
-    // Use flats for flat keys, sharps for sharp keys
-    if (targetKey && FLAT_KEYS.includes(targetKey)) {
-        // Convert sharp to flat if possible
-        const idx = CHORDS_SHARP.indexOf(note);
-        if (idx !== -1) note = CHORDS_FLAT[idx];
-    } else {
-        // Convert flat to sharp if possible
-        const idx = CHORDS_FLAT.indexOf(note);
-        if (idx !== -1) note = CHORDS_SHARP[idx];
+    // Always use sharps for accidentals unless original chord is flat
+    const idxSharp = CHORDS_SHARP.indexOf(note);
+    const idxFlat = CHORDS_FLAT.indexOf(note);
+    if (idxSharp !== -1 && note.includes('#')) {
+        note = CHORDS_SHARP[idxSharp];
+    } else if (idxFlat !== -1 && note.includes('b')) {
+        note = CHORDS_FLAT[idxFlat];
+    } else if (idxSharp !== -1 && idxFlat !== -1 && note.length > 1) {
+        // If accidental, prefer sharp
+        note = CHORDS_SHARP[idxSharp];
     }
     return note;
 }
