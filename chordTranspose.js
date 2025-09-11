@@ -115,6 +115,10 @@ function transposeChord(chord, steps, targetKey = null) {
 }
 
 function transposeChordLine(line, fromKey, toKey) {
+    // Normalize keys first
+    fromKey = normalizeEnharmonic(fromKey);
+    toKey = normalizeEnharmonic(toKey);
+    
     // Calculate steps to transpose
     let fromIdx = getChordIndex(fromKey);
     if (fromIdx === -1) fromIdx = getChordIndex(fromKey, true);
@@ -129,13 +133,17 @@ function transposeChordLine(line, fromKey, toKey) {
     // Replace chords in line - improved regex for better chord detection
     return line.replace(/\b([A-G][b#]*)([mM]?(?:aj|in|sus[24]?|aug|dim|add)?[0-9]*(?:[b#][0-9]+)*(?:\/[A-G][b#]*)?)\b/g, (match) => {
         let result = transposeChord(match, steps, toKey);
-        // Extra safety: normalize any remaining double sharps/flats in the final result
-        result = result.replace(/([A-G])##/g, (m, note) => {
-            return normalizeEnharmonic(note + '##', toKey);
+        
+        // Final cleanup: replace any remaining double sharps/flats
+        result = result.replace(/([A-G])##/g, (fullMatch, note) => {
+            const normalized = normalizeEnharmonic(note + '##', toKey);
+            return normalized;
         });
-        result = result.replace(/([A-G])bb/g, (m, note) => {
-            return normalizeEnharmonic(note + 'bb', toKey);
+        result = result.replace(/([A-G])bb/g, (fullMatch, note) => {
+            const normalized = normalizeEnharmonic(note + 'bb', toKey);
+            return normalized;
         });
+        
         return result;
     });
 }
