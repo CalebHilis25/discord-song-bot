@@ -1,13 +1,13 @@
-// Railway-compatible web search service using built-in modules
+// Replit-compatible web search service using built-in modules
 const https = require('https');
 const { URL } = require('url');
 
 class LyricsSearchService {
     constructor() {
-        console.log('🌐 Web search service initialized (Railway compatible)');
+        console.log('🌐 Web search service initialized (Replit compatible)');
     }
 
-    // Railway-compatible web search
+    // Replit-compatible web search
     async searchLyrics(songTitle, artist = '') {
         try {
             console.log(`🔍 Web search for: "${songTitle}" by ${artist}`);

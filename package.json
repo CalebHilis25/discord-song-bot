@@ -1,12 +1,11 @@
 {
   "name": "discord-song-bot",
   "version": "4.0.0",
-  "description": "Discord bot that ONLY processes URLs and pasted lyrics - NO web search",
+  "description": "Discord bot that processes pasted lyrics and generates PDF chord charts - Manual input only",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js",
-    "railway": "chmod +x start.sh && ./start.sh"
+    "dev": "node index.js"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -102,7 +102,7 @@ client.once('ready', async () => {
     console.log(`📎 .txt File Support Enabled`);
     console.log(`❌ NO URL PROCESSING`);
     console.log(`❌ NO WEB SEARCH FUNCTIONALITY`);
-    console.log(`� RAILWAY DEPLOYMENT ACTIVE`);
+    console.log(`🔥 REPLIT DEPLOYMENT ACTIVE`);
 });
 
 // Message handler

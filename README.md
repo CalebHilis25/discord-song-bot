@@ -4,14 +4,14 @@ A Discord bot that provides song lyrics with chords and generates downloadable P
 
 ## ✨ Features
 
-- 🔍 **Smart Song Search** - Local database + Web search
-- 🌐 **Internet Search** - Automatically searches the web for songs
-- 📄 **PDF Generation** - 2-column layout with lyrics and chords
+- 📝 **Manual Lyrics Processing** - Paste complete lyrics with chords
+- 📎 **.txt File Support** - Upload lyrics files directly
+- 📄 **PDF Generation** - Microsoft Word-style columns with lyrics and chords
 - 📥 **Auto Download** - Ready-to-download PDF files
-- 🎨 **Custom Format** - Bold titles, 11pt font size
+- 🎨 **Professional Format** - Bold titles, proper spacing, 11pt font
 - ⚡ **Real-time Response** - Instant Discord integration
-- 🤖 **Auto-Discovery** - Finds popular songs automatically
-- 💡 **Smart Suggestions** - Provides alternatives when songs aren't found
+- 🔄 **Chord Transposition** - Change keys after PDF generation
+- 💡 **Interactive Flow** - Guided title and artist input
 
 ## 🚀 Quick Start
 
@@ -43,43 +43,39 @@ A Discord bot that provides song lyrics with chords and generates downloadable P
    npm start
    ```
 
-### Railway Deployment (24/7 Hosting)
+### Replit Deployment (24/7 Hosting)
 
-1. **Push to GitHub**
-2. **Connect to Railway** at [railway.app](https://railway.app)
-3. **Add environment variable**: `DISCORD_TOKEN`
-4. **Deploy automatically** 🚀
+1. **Import from GitHub** to Replit
+2. **Add Discord token** using Replit Secrets
+3. **Run automatically** in Replit workspace 🚀
 
 ## 📖 Usage
 
 ### Discord Commands
 
-- **Song Search**: Just type the song title or "Artist - Song"
-  ```
-  Blinding Lights
-  The Weeknd - Blinding Lights
-  Wonderwall Oasis
-  ```
+- **Paste Lyrics**: Simply paste complete song lyrics with chords
+- **Upload .txt File**: Attach a .txt file with lyrics and chords
+- **Help**: `!help` - Show available commands and usage instructions
+- **Version**: `!version` - Check bot version and features
+- **Cancel**: `!cancel` - Cancel current song processing
+- **Test**: `!test [lyrics]` - Test if input looks like lyrics
 
-- **Help**: `!help` - Show available commands and search tips
-- **List Songs**: `!list` - Show local and cached songs
-- **Auto-Discover**: `!discover` - Find and cache popular songs
+### Example Workflow
+When you paste lyrics or upload a .txt file:
+1. Bot validates the input contains lyrics and chords
+2. Bot asks for the song title
+3. Bot asks for the artist name
+4. Bot generates a professional PDF with your content
+5. Bot sends the PDF as a Discord attachment
+6. Bot offers chord transposition options
+7. Format: Microsoft Word-style columns, bold titles, proper spacing
 
-### Example Response
-When you type a song title, the bot will:
-1. Show a "🔍 Searching..." message
-2. Check local database first (fastest)
-3. Search the web if not found locally
-4. Generate a PDF with lyrics and chords
-5. Send the PDF as an attachment in Discord
-6. Include source information and legal disclaimers
-7. Format: 2 columns, bold title, 11pt font
-
-**Web Search Features:**
-- Searches multiple lyric websites
-- Caches results for faster future access
-- Provides source attribution
-- Includes copyright disclaimers
+**Manual Input Features:**
+- Processes pasted lyrics with chord notations
+- Supports .txt file uploads
+- Custom song title and artist input
+- Chord transposition capabilities
+- No web searching - lyrics provided by user
 
 ## 🛠️ Setup Instructions
 
@@ -130,20 +126,20 @@ Create JSON files in the `songs/` directory following the sample format.
 
 ## 🚀 Deployment
 
-### Railway (Recommended for 24/7 hosting)
+### Replit (Recommended for 24/7 hosting)
 
-1. **Prepare for deployment**:
-   - Ensure all code is pushed to GitHub
-   - `.env` file is in `.gitignore` 
+1. **Import to Replit**:
+   - Import your GitHub repo to Replit
+   - Install dependencies automatically
    - `start` script is defined in `package.json`
 
-2. **Deploy to Railway**:
-   - Connect your GitHub repo to Railway
-   - Add `DISCORD_TOKEN` environment variable
-   - Railway will automatically deploy
+2. **Configure in Replit**:
+   - Add `DISCORD_TOKEN` using Replit Secrets
+   - Bot workflow will start automatically
+   - Replit handles environment setup
 
 3. **Monitor your bot**:
-   - Check Railway logs for any issues
+   - Check Replit console logs for any issues
    - Bot will restart automatically if it crashes
 
 ## 🔧 Environment Variables
